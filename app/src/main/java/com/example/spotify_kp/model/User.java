@@ -12,7 +12,9 @@ public class User {
 
     private String href;
     private String id;
-    private List<Image> images; // Добавили!
+    private List<Image> images;
+    private String type;
+    private String uri;
 
     public User() {}
 
@@ -36,6 +38,13 @@ public class User {
         return images;
     }
 
+    public String getType() {
+        return type;
+    }
+
+    public String getUri() {
+        return uri;
+    }
 
     public String getImageUrl() {
         if (images != null && !images.isEmpty()) {
