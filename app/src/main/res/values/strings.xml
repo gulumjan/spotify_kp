@@ -1,3 +1,29 @@
 <resources>
-    <string name="app_name">spotify_kp</string>
+    <string name="app_name">Music Albums</string>
+
+    <!-- Auth -->
+    <string name="welcome_back">Welcome Back</string>
+    <string name="login_subtitle">Login to your account</string>
+    <string name="create_account">Create Account</string>
+    <string name="register_subtitle">Sign up to get started</string>
+
+    <string name="email">Email</string>
+    <string name="password">Password</string>
+    <string name="confirm_password">Confirm Password</string>
+    <string name="display_name">Display Name</string>
+
+    <string name="login">Login</string>
+    <string name="register">Register</string>
+
+    <string name="no_account">Don\'t have an account? Register</string>
+    <string name="have_account">Already have an account? Login</string>
+
+    <!-- Validation -->
+    <string name="email_required">Email is required</string>
+    <string name="email_invalid">Please enter a valid email</string>
+    <string name="password_required">Password is required</string>
+    <string name="password_short">Password must be at least 6 characters</string>
+    <string name="passwords_not_match">Passwords do not match</string>
+    <string name="name_required">Name is required</string>
+    <string name="name_short">Name must be at least 3 characters</string>
 </resources>
