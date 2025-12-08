@@ -33,7 +33,7 @@ public class RetrofitClient {
         return retrofit;
     }
 
-    public static com.example.spotify_kp.api.SpotifyApi api() {
-        return get().create(com.example.spotify_kp.api.SpotifyApi.class);
+    public static com.example.spotify_kp.data.remote.SpotifyApi api() {
+        return get().create(com.example.spotify_kp.data.remote.SpotifyApi.class);
     }
 }

@@ -1,4 +1,4 @@
-package com.example.spotify_kp.api;
+package com.example.spotify_kp.data.remote;
 
 import com.example.spotify_kp.data.remote.dto.AlbumDto;
 import com.example.spotify_kp.data.remote.dto.AlbumResponse;

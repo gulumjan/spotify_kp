@@ -24,6 +24,8 @@ import androidx.recyclerview.widget.RecyclerView;
 import com.example.spotify_kp.R;
 import com.example.spotify_kp.data.local.entity.AlbumEntity;
 import com.example.spotify_kp.ui.catalog.adapter.AlbumAdapter;
+import com.example.spotify_kp.ui.details.DetailsActivity;
+import com.example.spotify_kp.utils.Constants;
 
 public class CatalogFragment extends Fragment implements AlbumAdapter.OnAlbumClickListener {
 
@@ -111,9 +113,11 @@ public class CatalogFragment extends Fragment implements AlbumAdapter.OnAlbumCli
     }
 
     @Override
+
     public void onAlbumClick(AlbumEntity album) {
-        Toast.makeText(getContext(), "Opening: " + album.getTitle(), Toast.LENGTH_SHORT).show();
-        // TODO: Navigate to DetailsActivity
+        Intent intent = new Intent(getContext(), DetailsActivity.class);
+        intent.putExtra(Constants.KEY_ALBUM_ID, album.getId());
+        startActivity(intent);
     }
 
     private void showLoading() {
