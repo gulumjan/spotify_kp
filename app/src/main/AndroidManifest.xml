@@ -44,6 +44,10 @@
         <activity
             android:name=".ui.main.MainActivity"
             android:exported="false" />
+        <activity
+            android:name=".ui.details.DetailsActivity"
+            android:exported="false"
+            android:theme="@style/Theme.Spotify_kp" />
 
     </application>
 
