@@ -16,7 +16,9 @@ import androidx.recyclerview.widget.RecyclerView;
 import com.bumptech.glide.Glide;
 import com.example.spotify_kp.R;
 import com.example.spotify_kp.data.remote.dto.AlbumDto;
+import com.example.spotify_kp.data.repository.FavoriteRepository;
 import com.example.spotify_kp.ui.details.adapter.TrackAdapter;
+import com.example.spotify_kp.ui.favorites.dialog.AddToFavoriteDialog;
 import com.example.spotify_kp.utils.Constants;
 import com.google.android.material.floatingactionbutton.FloatingActionButton;
 
@@ -33,16 +35,19 @@ public class DetailsActivity extends AppCompatActivity {
     private FloatingActionButton fabFavorite;
 
     private DetailsViewModel viewModel;
+    private FavoriteRepository favoriteRepository;
     private TrackAdapter trackAdapter;
 
     private String albumId;
+    private String currentAlbumTitle;
+    private String currentArtistName;
+    private boolean isFavorite = false;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_details);
 
-        // Получаем ID альбома из Intent
         albumId = getIntent().getStringExtra(Constants.KEY_ALBUM_ID);
 
         if (albumId == null) {
@@ -53,7 +58,15 @@ public class DetailsActivity extends AppCompatActivity {
 
         Log.d(TAG, "Opening album: " + albumId);
 
-        // Инициализация Views
+        initViews();
+        setupViewModel();
+        setupFavoriteRepository();
+        setupObservers();
+
+        viewModel.loadAlbumDetails(albumId);
+    }
+
+    private void initViews() {
         albumCover = findViewById(R.id.albumCover);
         albumTitle = findViewById(R.id.albumTitle);
         artistName = findViewById(R.id.artistName);
@@ -62,18 +75,23 @@ public class DetailsActivity extends AppCompatActivity {
         progressBar = findViewById(R.id.progressBar);
         fabFavorite = findViewById(R.id.fabFavorite);
 
-        // Back button
         findViewById(R.id.backButton).setOnClickListener(v -> finish());
 
-        // ViewModel
-        viewModel = new ViewModelProvider(this).get(DetailsViewModel.class);
-
-        // Adapter для треков
         trackAdapter = new TrackAdapter();
         tracksRecyclerView.setLayoutManager(new LinearLayoutManager(this));
         tracksRecyclerView.setAdapter(trackAdapter);
+    }
 
-        // Observer
+    private void setupViewModel() {
+        viewModel = new ViewModelProvider(this).get(DetailsViewModel.class);
+    }
+
+    private void setupFavoriteRepository() {
+        favoriteRepository = new FavoriteRepository(this);
+    }
+
+    private void setupObservers() {
+        // Observe album details
         viewModel.getAlbumDetails().observe(this, resource -> {
             if (resource != null) {
                 switch (resource.getStatus()) {
@@ -96,32 +114,33 @@ public class DetailsActivity extends AppCompatActivity {
             }
         });
 
-        // Загрузка деталей альбома
-        viewModel.loadAlbumDetails(albumId);
-
-        // FAB для добавления в избранное
-        fabFavorite.setOnClickListener(v -> {
-            Toast.makeText(this, "Add to favorites", Toast.LENGTH_SHORT).show();
-            // TODO: Открыть диалог добавления в избранное
+        // Observe favorite status
+        favoriteRepository.isAlbumFavorite(albumId).observe(this, isFav -> {
+            if (isFav != null) {
+                isFavorite = isFav;
+                updateFabIcon();
+            }
         });
     }
 
     private void displayAlbumDetails(AlbumDto album) {
-        albumTitle.setText(album.getName());
+        currentAlbumTitle = album.getName();
+        albumTitle.setText(currentAlbumTitle);
 
-        // Артист
+        // Artist
         if (album.getArtists() != null && !album.getArtists().isEmpty()) {
-            artistName.setText(album.getArtists().get(0).getName());
+            currentArtistName = album.getArtists().get(0).getName();
+            artistName.setText(currentArtistName);
         }
 
-        // Год и количество треков
+        // Year and track count
         String year = "Unknown";
         if (album.getReleaseDate() != null && album.getReleaseDate().length() >= 4) {
             year = album.getReleaseDate().substring(0, 4);
         }
         albumInfo.setText(year + " • " + album.getTotalTracks() + " tracks");
 
-        // Обложка
+        // Cover
         if (album.getImages() != null && !album.getImages().isEmpty()) {
             Glide.with(this)
                     .load(album.getImages().get(0).getUrl())
@@ -130,9 +149,45 @@ public class DetailsActivity extends AppCompatActivity {
                     .into(albumCover);
         }
 
-        // Треки
+        // Tracks
         if (album.getTracks() != null && album.getTracks().getItems() != null) {
             trackAdapter.setTracks(album.getTracks().getItems());
+        }
+
+        setupFabListener();
+    }
+
+    private void setupFabListener() {
+        fabFavorite.setOnClickListener(v -> {
+            if (isFavorite) {
+                // Remove from favorites
+                favoriteRepository.removeFromFavorites(albumId);
+                Toast.makeText(this, "Removed from favorites", Toast.LENGTH_SHORT).show();
+            } else {
+                // Show dialog to add to favorites
+                showAddToFavoriteDialog();
+            }
+        });
+    }
+
+    private void showAddToFavoriteDialog() {
+        AddToFavoriteDialog dialog = new AddToFavoriteDialog(
+                this,
+                currentAlbumTitle,
+                currentArtistName,
+                (comment, rating) -> {
+                    favoriteRepository.addToFavorites(albumId, comment, rating);
+                    Toast.makeText(this, "Added to favorites!", Toast.LENGTH_SHORT).show();
+                }
+        );
+        dialog.show();
+    }
+
+    private void updateFabIcon() {
+        if (isFavorite) {
+            fabFavorite.setImageResource(R.drawable.ic_favorite_filled);
+        } else {
+            fabFavorite.setImageResource(R.drawable.ic_favorite);
         }
     }
 }

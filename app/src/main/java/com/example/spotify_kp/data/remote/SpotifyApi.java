@@ -3,6 +3,7 @@ package com.example.spotify_kp.data.remote;
 import com.example.spotify_kp.data.remote.dto.AlbumDto;
 import com.example.spotify_kp.data.remote.dto.AlbumResponse;
 import com.example.spotify_kp.data.remote.dto.LoginRequest;
+import com.example.spotify_kp.data.remote.dto.NewReleasesResponse;
 import com.example.spotify_kp.data.remote.dto.RegisterRequest;
 import com.example.spotify_kp.model.TrackResponse;
 import com.example.spotify_kp.model.User;
@@ -37,6 +38,11 @@ public interface SpotifyApi {
     Call<AlbumResponse> searchAlbums(@Query("q") String query,
                                      @Query("type") String type,
                                      @Query("limit") int limit);
+
+    // NEW RELEASES - новый endpoint
+    @GET("browse/new-releases")
+    Call<NewReleasesResponse> getNewReleases(@Query("limit") int limit,
+                                             @Query("offset") int offset);
 
     // TRACKS
     @GET("tracks")
