@@ -1,5 +1,6 @@
 package com.example.spotify_kp.ui.main;
 
+import android.content.Intent;
 import android.os.Bundle;
 import android.util.Log;
 import android.view.View;
@@ -13,7 +14,12 @@ import com.bumptech.glide.Glide;
 import com.example.spotify_kp.R;
 import com.example.spotify_kp.data.remote.RetrofitClient;
 import com.example.spotify_kp.model.User;
+import com.example.spotify_kp.ui.auth.LoginActivity;
 import com.example.spotify_kp.ui.catalog.CatalogFragment;
+import com.example.spotify_kp.ui.favorites.FavoritesFragment;
+import com.example.spotify_kp.ui.newreleases.NewReleasesFragment;
+import com.example.spotify_kp.utils.SharedPrefsManager;
+import com.google.android.material.bottomnavigation.BottomNavigationView;
 
 import java.util.Calendar;
 
@@ -25,28 +31,74 @@ import retrofit2.Response;
 public class MainActivity extends AppCompatActivity {
 
     private static final String TAG = "MainActivity";
+
     private TextView userName;
     private TextView greetingText;
     private CircleImageView profileImage;
+    private ImageView settingsIcon;
+    private BottomNavigationView bottomNavigation;
+
+    private SharedPrefsManager prefsManager;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
 
-        View headerView = findViewById(R.id.headerProfile);
+        prefsManager = SharedPrefsManager.getInstance(this);
 
-        userName = headerView.findViewById(R.id.userName);
-        greetingText = headerView.findViewById(R.id.greetingText);
-        profileImage = headerView.findViewById(R.id.profileImage);
+        initViews();
+        setupHeader();
+        setupBottomNavigation();
 
-        setGreeting();
-        loadUserProfile();
-
-        // Загружаем CatalogFragment
+        // Загружаем CatalogFragment по умолчанию
         if (savedInstanceState == null) {
             loadFragment(new CatalogFragment());
         }
+    }
+
+    private void initViews() {
+        View headerView = findViewById(R.id.headerProfile);
+        userName = headerView.findViewById(R.id.userName);
+        greetingText = headerView.findViewById(R.id.greetingText);
+        profileImage = headerView.findViewById(R.id.profileImage);
+        settingsIcon = headerView.findViewById(R.id.settingsIcon);
+        bottomNavigation = findViewById(R.id.bottomNavigation);
+    }
+
+    private void setupHeader() {
+        setGreeting();
+        loadUserProfile();
+
+        // Settings click - logout
+        settingsIcon.setOnClickListener(v -> {
+            prefsManager.logout();
+            Intent intent = new Intent(MainActivity.this, LoginActivity.class);
+            intent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TASK);
+            startActivity(intent);
+            finish();
+        });
+    }
+
+    private void setupBottomNavigation() {
+        bottomNavigation.setOnItemSelectedListener(item -> {
+            Fragment fragment = null;
+            int itemId = item.getItemId();
+
+            if (itemId == R.id.nav_catalog) {
+                fragment = new CatalogFragment();
+            } else if (itemId == R.id.nav_new_releases) {
+                fragment = new NewReleasesFragment();
+            } else if (itemId == R.id.nav_favorites) {
+                fragment = new FavoritesFragment();
+            }
+
+            if (fragment != null) {
+                loadFragment(fragment);
+                return true;
+            }
+            return false;
+        });
     }
 
     private void loadFragment(Fragment fragment) {
@@ -72,6 +124,23 @@ public class MainActivity extends AppCompatActivity {
     private void loadUserProfile() {
         Log.d(TAG, "Starting to load user profile...");
 
+        // Сначала показываем данные из SharedPreferences
+        String savedName = prefsManager.getUserName();
+        String savedImage = prefsManager.getUserImage();
+
+        if (savedName != null) {
+            userName.setText(savedName);
+        }
+
+        if (savedImage != null && !savedImage.isEmpty()) {
+            Glide.with(this)
+                    .load(savedImage)
+                    .placeholder(R.drawable.ic_profile_placeholder)
+                    .error(R.drawable.ic_profile_placeholder)
+                    .into(profileImage);
+        }
+
+        // Затем обновляем с сервера
         RetrofitClient.api().getUserProfile().enqueue(new Callback<User>() {
             @Override
             public void onResponse(Call<User> call, Response<User> response) {
@@ -92,22 +161,18 @@ public class MainActivity extends AppCompatActivity {
                                     .placeholder(R.drawable.ic_profile_placeholder)
                                     .error(R.drawable.ic_profile_placeholder)
                                     .into(profileImage);
-                        } else {
-                            Log.d(TAG, "No image URL available");
                         }
 
                         Log.d(TAG, "UI updated");
                     });
                 } else {
                     Log.e(TAG, "Error loading profile: " + response.code());
-                    userName.setText("Error");
                 }
             }
 
             @Override
             public void onFailure(Call<User> call, Throwable t) {
                 Log.e(TAG, "Network failure: " + t.getMessage());
-                userName.setText("Connection error");
                 t.printStackTrace();
             }
         });

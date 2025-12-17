@@ -1,18 +1,14 @@
-package com.example.spotify_kp.ui.catalog;
+package com.example.spotify_kp.ui.newreleases;
 
 import android.content.Intent;
 import android.os.Bundle;
-import android.text.Editable;
-import android.text.TextWatcher;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
 import android.widget.Button;
-import android.widget.EditText;
 import android.widget.LinearLayout;
 import android.widget.ProgressBar;
 import android.widget.TextView;
-import android.widget.Toast;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
@@ -28,9 +24,9 @@ import com.example.spotify_kp.ui.catalog.adapter.AlbumAdapter;
 import com.example.spotify_kp.ui.details.DetailsActivity;
 import com.example.spotify_kp.utils.Constants;
 
-public class CatalogFragment extends Fragment implements AlbumAdapter.OnAlbumClickListener {
+public class NewReleasesFragment extends Fragment implements AlbumAdapter.OnAlbumClickListener {
 
-    private CatalogViewModel viewModel;
+    private NewReleasesViewModel viewModel;
     private AlbumAdapter adapter;
 
     private SwipeRefreshLayout swipeRefresh;
@@ -40,13 +36,15 @@ public class CatalogFragment extends Fragment implements AlbumAdapter.OnAlbumCli
     private LinearLayout errorState;
     private TextView errorText;
     private Button retryButton;
-    private EditText searchInput;
+    private TextView headerTitle;
+
+    private boolean isLoadingMore = false;
 
     @Nullable
     @Override
     public View onCreateView(@NonNull LayoutInflater inflater, @Nullable ViewGroup container,
                              @Nullable Bundle savedInstanceState) {
-        return inflater.inflate(R.layout.fragment_catalog, container, false);
+        return inflater.inflate(R.layout.fragment_new_releases, container, false);
     }
 
     @Override
@@ -57,13 +55,14 @@ public class CatalogFragment extends Fragment implements AlbumAdapter.OnAlbumCli
         setupViewModel();
         setupRecyclerView();
         setupSwipeRefresh();
-        setupSearchInput();
-        observeAlbums();
+        setupScrollListener();
+        observeNewReleases();
 
-        viewModel.loadAlbums();
+        viewModel.loadNewReleases();
     }
 
     private void initViews(View view) {
+        headerTitle = view.findViewById(R.id.headerTitle);
         swipeRefresh = view.findViewById(R.id.swipeRefresh);
         recyclerView = view.findViewById(R.id.recyclerView);
         progressBar = view.findViewById(R.id.progressBar);
@@ -71,11 +70,10 @@ public class CatalogFragment extends Fragment implements AlbumAdapter.OnAlbumCli
         errorState = view.findViewById(R.id.errorState);
         errorText = view.findViewById(R.id.errorText);
         retryButton = view.findViewById(R.id.retryButton);
-        searchInput = view.findViewById(R.id.searchInput);
     }
 
     private void setupViewModel() {
-        viewModel = new ViewModelProvider(this).get(CatalogViewModel.class);
+        viewModel = new ViewModelProvider(this).get(NewReleasesViewModel.class);
     }
 
     private void setupRecyclerView() {
@@ -88,39 +86,48 @@ public class CatalogFragment extends Fragment implements AlbumAdapter.OnAlbumCli
     private void setupSwipeRefresh() {
         swipeRefresh.setColorSchemeResources(R.color.spotify_green);
         swipeRefresh.setOnRefreshListener(() -> {
-            viewModel.loadAlbums();
+            viewModel.loadNewReleases();
         });
     }
 
-    private void setupSearchInput() {
-        searchInput.addTextChangedListener(new TextWatcher() {
+    private void setupScrollListener() {
+        recyclerView.addOnScrollListener(new RecyclerView.OnScrollListener() {
             @Override
-            public void beforeTextChanged(CharSequence s, int start, int count, int after) {}
+            public void onScrolled(@NonNull RecyclerView recyclerView, int dx, int dy) {
+                super.onScrolled(recyclerView, dx, dy);
 
-            @Override
-            public void onTextChanged(CharSequence s, int start, int before, int count) {
-                if (s.length() > 2) {
-                    viewModel.searchAlbums(s.toString());
-                } else if (s.length() == 0) {
-                    viewModel.loadAlbums();
+                GridLayoutManager layoutManager = (GridLayoutManager) recyclerView.getLayoutManager();
+                if (layoutManager != null && !isLoadingMore && !viewModel.isLoading()) {
+                    int visibleItemCount = layoutManager.getChildCount();
+                    int totalItemCount = layoutManager.getItemCount();
+                    int firstVisibleItemPosition = layoutManager.findFirstVisibleItemPosition();
+
+                    // Загружаем следующую страницу, когда доходим до последних 4 элементов
+                    if ((visibleItemCount + firstVisibleItemPosition) >= totalItemCount - 4
+                            && firstVisibleItemPosition >= 0) {
+                        loadNextPage();
+                    }
                 }
             }
-
-            @Override
-            public void afterTextChanged(Editable s) {}
         });
 
-        retryButton.setOnClickListener(v -> viewModel.loadAlbums());
+        retryButton.setOnClickListener(v -> viewModel.loadNewReleases());
     }
 
-    private void observeAlbums() {
-        viewModel.getAlbums().observe(getViewLifecycleOwner(), resource -> {
+    private void loadNextPage() {
+        isLoadingMore = true;
+        viewModel.loadNextPage();
+    }
+
+    private void observeNewReleases() {
+        viewModel.getNewReleases().observe(getViewLifecycleOwner(), resource -> {
             if (resource != null) {
                 swipeRefresh.setRefreshing(false);
+                isLoadingMore = false;
 
                 switch (resource.getStatus()) {
                     case LOADING:
-                        if (!swipeRefresh.isRefreshing()) {
+                        if (!swipeRefresh.isRefreshing() && !isLoadingMore) {
                             showLoading();
                         }
                         break;
@@ -135,7 +142,9 @@ public class CatalogFragment extends Fragment implements AlbumAdapter.OnAlbumCli
                         break;
 
                     case ERROR:
-                        showError(resource.getMessage());
+                        if (adapter.getItemCount() == 0) {
+                            showError(resource.getMessage());
+                        }
                         break;
                 }
             }
