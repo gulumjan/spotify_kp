@@ -17,9 +17,12 @@ import com.example.spotify_kp.R;
 import com.example.spotify_kp.data.local.entity.AlbumEntity;
 import com.example.spotify_kp.data.local.entity.FavoriteEntity;
 
+import java.text.SimpleDateFormat;
 import java.util.ArrayList;
+import java.util.Date;
 import java.util.HashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 
 public class FavoriteAdapter extends RecyclerView.Adapter<FavoriteAdapter.FavoriteViewHolder> {
@@ -27,6 +30,7 @@ public class FavoriteAdapter extends RecyclerView.Adapter<FavoriteAdapter.Favori
     public interface OnFavoriteClickListener {
         void onFavoriteClick(FavoriteEntity favorite, AlbumEntity album);
         void onRemoveFavorite(FavoriteEntity favorite);
+        void onEditFavorite(FavoriteEntity favorite, AlbumEntity album);
     }
 
     private List<FavoriteEntity> favorites = new ArrayList<>();
@@ -77,32 +81,52 @@ public class FavoriteAdapter extends RecyclerView.Adapter<FavoriteAdapter.Favori
         private ImageView albumCover;
         private TextView albumTitle;
         private TextView artistName;
+        private TextView yearGenre;
         private RatingBar ratingBar;
+        private TextView ratingText;
         private TextView commentText;
+        private TextView addedDate;
         private ImageView removeButton;
+        private ImageView editButton;
 
         public FavoriteViewHolder(@NonNull View itemView) {
             super(itemView);
             albumCover = itemView.findViewById(R.id.albumCover);
             albumTitle = itemView.findViewById(R.id.albumTitle);
             artistName = itemView.findViewById(R.id.artistName);
+            yearGenre = itemView.findViewById(R.id.yearGenre);
             ratingBar = itemView.findViewById(R.id.ratingBar);
+            ratingText = itemView.findViewById(R.id.ratingText);
             commentText = itemView.findViewById(R.id.commentText);
+            addedDate = itemView.findViewById(R.id.addedDate);
             removeButton = itemView.findViewById(R.id.removeButton);
+            editButton = itemView.findViewById(R.id.editButton);
         }
 
         public void bind(FavoriteEntity favorite, AlbumEntity album, OnFavoriteClickListener listener) {
             albumTitle.setText(album.getTitle());
             artistName.setText(album.getArtist());
-            ratingBar.setRating(favorite.getUserRating());
 
-            // Show or hide comment
+            // Year and Genre
+            String yearGenreText = album.getYear() + " • " + album.getGenre();
+            yearGenre.setText(yearGenreText);
+
+            // Rating
+            ratingBar.setRating(favorite.getUserRating());
+            ratingText.setText(String.format(Locale.getDefault(), "%.1f", favorite.getUserRating()));
+
+            // Comment
             if (favorite.getUserComment() != null && !favorite.getUserComment().isEmpty()) {
                 commentText.setVisibility(View.VISIBLE);
                 commentText.setText(favorite.getUserComment());
             } else {
                 commentText.setVisibility(View.GONE);
             }
+
+            // Added Date
+            SimpleDateFormat sdf = new SimpleDateFormat("MMM dd, yyyy", Locale.getDefault());
+            String dateText = "Added: " + sdf.format(new Date(favorite.getAddedDate()));
+            addedDate.setText(dateText);
 
             // Load cover
             Glide.with(itemView.getContext())
@@ -117,6 +141,12 @@ public class FavoriteAdapter extends RecyclerView.Adapter<FavoriteAdapter.Favori
             itemView.setOnClickListener(v -> {
                 if (listener != null) {
                     listener.onFavoriteClick(favorite, album);
+                }
+            });
+
+            editButton.setOnClickListener(v -> {
+                if (listener != null) {
+                    listener.onEditFavorite(favorite, album);
                 }
             });
 

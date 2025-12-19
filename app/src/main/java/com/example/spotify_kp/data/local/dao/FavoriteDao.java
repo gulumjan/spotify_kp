@@ -30,12 +30,26 @@ public interface FavoriteDao {
     @Query("SELECT * FROM favorites WHERE album_id = :albumId AND user_id = :userId LIMIT 1")
     LiveData<FavoriteEntity> getFavoriteByAlbum(String albumId, String userId);
 
+    @Query("SELECT * FROM favorites WHERE album_id = :albumId AND user_id = :userId LIMIT 1")
+    FavoriteEntity getFavoriteByAlbumSync(String albumId, String userId);
+
     @Query("SELECT EXISTS(SELECT 1 FROM favorites WHERE album_id = :albumId AND user_id = :userId)")
     LiveData<Boolean> isAlbumFavorite(String albumId, String userId);
+
+    @Query("SELECT COUNT(*) FROM favorites WHERE user_id = :userId")
+    int getFavoritesCountSync(String userId);
 
     @Query("DELETE FROM favorites WHERE album_id = :albumId AND user_id = :userId")
     void removeFavorite(String albumId, String userId);
 
     @Query("DELETE FROM favorites WHERE user_id = :userId")
     void deleteAllByUser(String userId);
+
+    // Получить избранные альбомы с рейтингом выше заданного
+    @Query("SELECT * FROM favorites WHERE user_id = :userId AND user_rating >= :minRating ORDER BY user_rating DESC")
+    LiveData<List<FavoriteEntity>> getFavoritesByRating(String userId, float minRating);
+
+    // Получить последние добавленные избранные
+    @Query("SELECT * FROM favorites WHERE user_id = :userId ORDER BY added_date DESC LIMIT :limit")
+    LiveData<List<FavoriteEntity>> getRecentFavorites(String userId, int limit);
 }

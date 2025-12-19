@@ -30,8 +30,14 @@ public interface AlbumDao {
     @Query("SELECT * FROM albums ORDER BY created_at DESC")
     LiveData<List<AlbumEntity>> getAllAlbums();
 
+    @Query("SELECT * FROM albums ORDER BY created_at DESC")
+    List<AlbumEntity> getAllAlbumsSync();
+
     @Query("SELECT * FROM albums WHERE id = :albumId LIMIT 1")
     LiveData<AlbumEntity> getAlbumById(String albumId);
+
+    @Query("SELECT * FROM albums WHERE id = :albumId LIMIT 1")
+    AlbumEntity getAlbumByIdSync(String albumId);
 
     @Query("SELECT * FROM albums WHERE genre = :genre ORDER BY year DESC")
     LiveData<List<AlbumEntity>> getAlbumsByGenre(String genre);

@@ -7,14 +7,14 @@ import androidx.lifecycle.AndroidViewModel;
 import androidx.lifecycle.LiveData;
 import androidx.lifecycle.MutableLiveData;
 
-import com.example.spotify_kp.data.remote.dto.AlbumDto;
+import com.example.spotify_kp.data.local.entity.AlbumEntity;
 import com.example.spotify_kp.data.repository.AlbumRepository;
 import com.example.spotify_kp.utils.Resource;
 
 public class DetailsViewModel extends AndroidViewModel {
 
     private AlbumRepository albumRepository;
-    private MutableLiveData<Resource<AlbumDto>> albumDetails;
+    private MutableLiveData<Resource<AlbumEntity>> albumDetails;
 
     public DetailsViewModel(@NonNull Application application) {
         super(application);
@@ -22,12 +22,12 @@ public class DetailsViewModel extends AndroidViewModel {
         albumDetails = new MutableLiveData<>();
     }
 
-    public LiveData<Resource<AlbumDto>> getAlbumDetails() {
+    public LiveData<Resource<AlbumEntity>> getAlbumDetails() {
         return albumDetails;
     }
 
     public void loadAlbumDetails(String albumId) {
-        albumRepository.getAlbumDetails(albumId).observeForever(resource -> {
+        albumRepository.getAlbumDetailsFromDb(albumId).observeForever(resource -> {
             albumDetails.setValue(resource);
         });
     }
