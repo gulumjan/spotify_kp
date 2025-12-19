@@ -16,10 +16,10 @@ import androidx.annotation.NonNull;
 
 import com.example.spotify_kp.R;
 
-public class AddToFavoriteDialog extends Dialog {
+public class EditFavoriteDialog extends Dialog {
 
-    public interface OnFavoriteAddedListener {
-        void onFavoriteAdded(String comment, float rating);
+    public interface OnFavoriteUpdatedListener {
+        void onFavoriteUpdated(String comment, float rating);
     }
 
     private TextView dialogTitle;
@@ -33,13 +33,18 @@ public class AddToFavoriteDialog extends Dialog {
 
     private String albumTitleText;
     private String artistNameText;
-    private OnFavoriteAddedListener listener;
+    private String existingComment;
+    private float existingRating;
+    private OnFavoriteUpdatedListener listener;
 
-    public AddToFavoriteDialog(@NonNull Context context, String albumTitle,
-                               String artistName, OnFavoriteAddedListener listener) {
+    public EditFavoriteDialog(@NonNull Context context, String albumTitle,
+                              String artistName, String existingComment,
+                              float existingRating, OnFavoriteUpdatedListener listener) {
         super(context);
         this.albumTitleText = albumTitle;
         this.artistNameText = artistName;
+        this.existingComment = existingComment;
+        this.existingRating = existingRating;
         this.listener = listener;
     }
 
@@ -47,7 +52,7 @@ public class AddToFavoriteDialog extends Dialog {
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         requestWindowFeature(Window.FEATURE_NO_TITLE);
-        setContentView(R.layout.dialog_add_favorite);
+        setContentView(R.layout.dialog_edit_favorite);
 
         // Прозрачный фон для округленных углов
         if (getWindow() != null) {
@@ -70,8 +75,12 @@ public class AddToFavoriteDialog extends Dialog {
 
         albumTitle.setText(albumTitleText);
         artistName.setText(artistNameText);
-        ratingBar.setRating(0);
-        updateRatingText(0);
+        ratingBar.setRating(existingRating);
+        updateRatingText(existingRating);
+
+        if (existingComment != null && !existingComment.isEmpty()) {
+            commentInput.setText(existingComment);
+        }
     }
 
     private void setupListeners() {
@@ -89,7 +98,7 @@ public class AddToFavoriteDialog extends Dialog {
             }
 
             if (listener != null) {
-                listener.onFavoriteAdded(comment, rating);
+                listener.onFavoriteUpdated(comment, rating);
             }
             dismiss();
         });

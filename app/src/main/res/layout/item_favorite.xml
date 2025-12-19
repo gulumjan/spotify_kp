@@ -18,8 +18,8 @@
         <!-- Album Cover -->
         <ImageView
             android:id="@+id/albumCover"
-            android:layout_width="80dp"
-            android:layout_height="80dp"
+            android:layout_width="100dp"
+            android:layout_height="100dp"
             android:scaleType="centerCrop"
             android:src="@drawable/ic_music" />
 
@@ -46,23 +46,55 @@
                 android:id="@+id/artistName"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_marginTop="4dp"
+                android:layout_marginTop="2dp"
                 android:text="Artist Name"
-                android:textColor="@color/text_secondary"
+                android:textColor="@color/spotify_green"
                 android:textSize="14sp"
                 android:maxLines="1"
                 android:ellipsize="end" />
 
-            <RatingBar
-                android:id="@+id/ratingBar"
-                style="@style/Widget.AppCompat.RatingBar.Small"
-                android:layout_width="wrap_content"
+            <TextView
+                android:id="@+id/yearGenre"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="2dp"
+                android:text="2011 • Electronic"
+                android:textColor="@color/text_secondary"
+                android:textSize="12sp"
+                android:maxLines="1"
+                android:ellipsize="end" />
+
+            <!-- Rating -->
+            <LinearLayout
+                android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="8dp"
-                android:isIndicator="true"
-                android:numStars="5"
-                android:rating="0" />
+                android:orientation="horizontal"
+                android:gravity="center_vertical">
 
+                <RatingBar
+                    android:id="@+id/ratingBar"
+                    style="@style/Widget.AppCompat.RatingBar.Small"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:isIndicator="true"
+                    android:numStars="5"
+                    android:rating="0"
+                    android:progressTint="@color/spotify_green"
+                    android:secondaryProgressTint="@color/spotify_green" />
+
+                <TextView
+                    android:id="@+id/ratingText"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginStart="8dp"
+                    android:text="4.5"
+                    android:textColor="@color/spotify_green"
+                    android:textSize="14sp"
+                    android:textStyle="bold" />
+            </LinearLayout>
+
+            <!-- Comment -->
             <TextView
                 android:id="@+id/commentText"
                 android:layout_width="match_parent"
@@ -75,17 +107,51 @@
                 android:ellipsize="end"
                 android:visibility="gone" />
 
+            <!-- Added Date -->
+            <TextView
+                android:id="@+id/addedDate"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="4dp"
+                android:text="Added: Dec 19, 2025"
+                android:textColor="@color/text_secondary"
+                android:textSize="11sp" />
+
         </LinearLayout>
 
-        <!-- Remove Button -->
-        <ImageView
-            android:id="@+id/removeButton"
-            android:layout_width="32dp"
-            android:layout_height="32dp"
-            android:layout_gravity="center_vertical"
-            android:src="@drawable/ic_favorite_filled"
-            android:padding="4dp"
-            android:tint="@color/spotify_green" />
+        <!-- Action Buttons -->
+        <LinearLayout
+            android:layout_width="wrap_content"
+            android:layout_height="match_parent"
+            android:orientation="vertical"
+            android:gravity="center">
+
+            <!-- Edit Button -->
+            <ImageView
+                android:id="@+id/editButton"
+                android:layout_width="36dp"
+                android:layout_height="36dp"
+                android:src="@drawable/ic_edit"
+                android:padding="6dp"
+                android:background="?attr/selectableItemBackgroundBorderless"
+                android:tint="@color/text_secondary" />
+
+            <View
+                android:layout_width="1dp"
+                android:layout_height="0dp"
+                android:layout_weight="1" />
+
+            <!-- Remove Button -->
+            <ImageView
+                android:id="@+id/removeButton"
+                android:layout_width="36dp"
+                android:layout_height="36dp"
+                android:src="@drawable/ic_favorite_filled"
+                android:padding="6dp"
+                android:background="?attr/selectableItemBackgroundBorderless"
+                android:tint="@color/spotify_green" />
+
+        </LinearLayout>
 
     </LinearLayout>
 

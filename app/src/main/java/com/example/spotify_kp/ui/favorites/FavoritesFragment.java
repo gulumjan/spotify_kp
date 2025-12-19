@@ -8,9 +8,11 @@ import android.view.ViewGroup;
 import android.widget.LinearLayout;
 import android.widget.ProgressBar;
 import android.widget.TextView;
+import android.widget.Toast;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
+import androidx.appcompat.app.AlertDialog;
 import androidx.fragment.app.Fragment;
 import androidx.lifecycle.ViewModelProvider;
 import androidx.recyclerview.widget.LinearLayoutManager;
@@ -19,8 +21,10 @@ import androidx.recyclerview.widget.RecyclerView;
 import com.example.spotify_kp.R;
 import com.example.spotify_kp.data.local.entity.AlbumEntity;
 import com.example.spotify_kp.data.local.entity.FavoriteEntity;
+import com.example.spotify_kp.data.repository.FavoriteRepository;
 import com.example.spotify_kp.ui.details.DetailsActivity;
 import com.example.spotify_kp.ui.favorites.adapter.FavoriteAdapter;
+import com.example.spotify_kp.ui.favorites.dialog.EditFavoriteDialog;
 import com.example.spotify_kp.utils.Constants;
 
 import java.util.ArrayList;
@@ -35,6 +39,7 @@ public class FavoritesFragment extends Fragment implements FavoriteAdapter.OnFav
 
     private FavoritesViewModel viewModel;
     private FavoriteAdapter adapter;
+    private FavoriteRepository favoriteRepository;
 
     @Nullable
     @Override
@@ -49,6 +54,7 @@ public class FavoritesFragment extends Fragment implements FavoriteAdapter.OnFav
 
         initViews(view);
         setupViewModel();
+        setupFavoriteRepository();
         setupRecyclerView();
         observeFavorites();
     }
@@ -62,6 +68,10 @@ public class FavoritesFragment extends Fragment implements FavoriteAdapter.OnFav
 
     private void setupViewModel() {
         viewModel = new ViewModelProvider(this).get(FavoritesViewModel.class);
+    }
+
+    private void setupFavoriteRepository() {
+        favoriteRepository = new FavoriteRepository(requireContext());
     }
 
     private void setupRecyclerView() {
@@ -107,7 +117,31 @@ public class FavoritesFragment extends Fragment implements FavoriteAdapter.OnFav
 
     @Override
     public void onRemoveFavorite(FavoriteEntity favorite) {
-        viewModel.removeFavorite(favorite.getAlbumId());
+        new AlertDialog.Builder(requireContext())
+                .setTitle("Remove from Favorites")
+                .setMessage("Are you sure you want to remove this album from favorites?")
+                .setPositiveButton("Remove", (dialog, which) -> {
+                    viewModel.removeFavorite(favorite.getAlbumId());
+                    Toast.makeText(getContext(), "Removed from favorites", Toast.LENGTH_SHORT).show();
+                })
+                .setNegativeButton("Cancel", null)
+                .show();
+    }
+
+    @Override
+    public void onEditFavorite(FavoriteEntity favorite, AlbumEntity album) {
+        EditFavoriteDialog dialog = new EditFavoriteDialog(
+                requireContext(),
+                album.getTitle(),
+                album.getArtist(),
+                favorite.getUserComment(),
+                favorite.getUserRating(),
+                (comment, rating) -> {
+                    favoriteRepository.updateFavorite(favorite.getAlbumId(), comment, rating);
+                    Toast.makeText(getContext(), "Favorite updated!", Toast.LENGTH_SHORT).show();
+                }
+        );
+        dialog.show();
     }
 
     private void showLoading() {

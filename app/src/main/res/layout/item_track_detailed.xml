@@ -18,19 +18,39 @@
         android:textSize="14sp"
         android:gravity="center" />
 
-    <!-- Track Name -->
-    <TextView
-        android:id="@+id/trackName"
+    <!-- Track Info -->
+    <LinearLayout
         android:layout_width="0dp"
         android:layout_height="wrap_content"
         android:layout_weight="1"
         android:layout_marginStart="12dp"
         android:layout_marginEnd="12dp"
-        android:text="Track Name"
-        android:textColor="@color/text_primary"
-        android:textSize="15sp"
-        android:ellipsize="end"
-        android:maxLines="1" />
+        android:orientation="vertical">
+
+        <!-- Track Name -->
+        <TextView
+            android:id="@+id/trackName"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Track Name"
+            android:textColor="@color/text_primary"
+            android:textSize="15sp"
+            android:ellipsize="end"
+            android:maxLines="1" />
+
+        <!-- Artist Name -->
+        <TextView
+            android:id="@+id/trackArtist"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="2dp"
+            android:text="Artist Name"
+            android:textColor="@color/text_secondary"
+            android:textSize="13sp"
+            android:ellipsize="end"
+            android:maxLines="1" />
+
+    </LinearLayout>
 
     <!-- Track Duration -->
     <TextView

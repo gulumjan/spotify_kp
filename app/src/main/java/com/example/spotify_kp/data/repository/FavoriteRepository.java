@@ -4,6 +4,7 @@ import android.content.Context;
 import android.util.Log;
 
 import androidx.lifecycle.LiveData;
+import androidx.lifecycle.MutableLiveData;
 
 import com.example.spotify_kp.data.local.AppDatabase;
 import com.example.spotify_kp.data.local.entity.FavoriteEntity;
@@ -34,7 +35,7 @@ public class FavoriteRepository {
             favorite.setFavorite(true);
 
             database.favoriteDao().insert(favorite);
-            Log.d(TAG, "Album added to favorites: " + albumId);
+            Log.d(TAG, "Album added to favorites: " + albumId + " with rating: " + rating);
         }).start();
     }
 
@@ -44,6 +45,21 @@ public class FavoriteRepository {
             String userId = prefsManager.getUserId();
             database.favoriteDao().removeFavorite(albumId, userId);
             Log.d(TAG, "Album removed from favorites: " + albumId);
+        }).start();
+    }
+
+    // Обновить комментарий и рейтинг
+    public void updateFavorite(String albumId, String comment, float rating) {
+        new Thread(() -> {
+            String userId = prefsManager.getUserId();
+            FavoriteEntity favorite = database.favoriteDao().getFavoriteByAlbumSync(albumId, userId);
+
+            if (favorite != null) {
+                favorite.setUserComment(comment);
+                favorite.setUserRating(rating);
+                database.favoriteDao().update(favorite);
+                Log.d(TAG, "Favorite updated: " + albumId);
+            }
         }).start();
     }
 
@@ -63,5 +79,27 @@ public class FavoriteRepository {
     public LiveData<FavoriteEntity> getFavoriteByAlbum(String albumId) {
         String userId = prefsManager.getUserId();
         return database.favoriteDao().getFavoriteByAlbum(albumId, userId);
+    }
+
+    // Получить количество избранных альбомов
+    public LiveData<Integer> getFavoritesCount() {
+        MutableLiveData<Integer> result = new MutableLiveData<>();
+        String userId = prefsManager.getUserId();
+
+        new Thread(() -> {
+            int count = database.favoriteDao().getFavoritesCountSync(userId);
+            result.postValue(count);
+        }).start();
+
+        return result;
+    }
+
+    // Удалить все избранное пользователя
+    public void clearAllFavorites() {
+        new Thread(() -> {
+            String userId = prefsManager.getUserId();
+            database.favoriteDao().deleteAllByUser(userId);
+            Log.d(TAG, "All favorites cleared for user: " + userId);
+        }).start();
     }
 }

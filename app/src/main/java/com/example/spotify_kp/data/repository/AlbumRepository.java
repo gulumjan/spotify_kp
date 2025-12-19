@@ -12,6 +12,7 @@ import com.example.spotify_kp.data.local.entity.AlbumEntity;
 import com.example.spotify_kp.data.mapper.AlbumMapper;
 import com.example.spotify_kp.data.remote.dto.AlbumDto;
 import com.example.spotify_kp.data.remote.dto.AlbumResponse;
+import com.example.spotify_kp.data.remote.dto.NewReleasesResponse;
 import com.example.spotify_kp.utils.Resource;
 
 import java.util.List;
@@ -40,7 +41,7 @@ public class AlbumRepository {
 
         // Сначала проверяем локальную БД
         new Thread(() -> {
-            List<AlbumEntity> cachedAlbums = database.albumDao().getAllAlbums().getValue();
+            List<AlbumEntity> cachedAlbums = database.albumDao().getAllAlbumsSync();
             if (cachedAlbums != null && !cachedAlbums.isEmpty()) {
                 result.postValue(Resource.success(cachedAlbums));
                 Log.d(TAG, "Loaded albums from cache: " + cachedAlbums.size());
@@ -55,10 +56,8 @@ public class AlbumRepository {
                     List<AlbumDto> albumDtos = response.body().getAlbums();
 
                     if (albumDtos != null && !albumDtos.isEmpty()) {
-                        // Конвертируем DTO → Entity
                         List<AlbumEntity> albums = AlbumMapper.toEntityList(albumDtos);
 
-                        // Сохраняем в Room
                         new Thread(() -> {
                             database.albumDao().insertAll(albums);
                             Log.d(TAG, "Saved albums to database: " + albums.size());
@@ -85,28 +84,66 @@ public class AlbumRepository {
         return result;
     }
 
-    // Получение деталей альбома по ID
-    public LiveData<Resource<AlbumDto>> getAlbumDetails(String albumId) {
-        MutableLiveData<Resource<AlbumDto>> result = new MutableLiveData<>();
+    // Получение деталей альбома из локальной БД
+    public LiveData<Resource<AlbumEntity>> getAlbumDetailsFromDb(String albumId) {
+        MutableLiveData<Resource<AlbumEntity>> result = new MutableLiveData<>();
         result.setValue(Resource.loading(null));
 
-        RetrofitClient.api().getAlbumById(albumId).enqueue(new Callback<AlbumDto>() {
-            @Override
-            public void onResponse(Call<AlbumDto> call, Response<AlbumDto> response) {
-                if (response.isSuccessful() && response.body() != null) {
-                    result.setValue(Resource.success(response.body()));
-                    Log.d(TAG, "Album details loaded: " + response.body().getName());
-                } else {
-                    result.setValue(Resource.error("Failed to load album details", null));
-                }
+        new Thread(() -> {
+            AlbumEntity album = database.albumDao().getAlbumByIdSync(albumId);
+            if (album != null) {
+                result.postValue(Resource.success(album));
+                Log.d(TAG, "Album loaded from DB: " + album.getTitle());
+            } else {
+                result.postValue(Resource.error("Album not found", null));
+                Log.e(TAG, "Album not found in DB: " + albumId);
             }
+        }).start();
 
-            @Override
-            public void onFailure(Call<AlbumDto> call, Throwable t) {
-                result.setValue(Resource.error("Network error: " + t.getMessage(), null));
-                Log.e(TAG, "Error loading album details: " + t.getMessage());
-            }
-        });
+        return result;
+    }
+
+    // Загрузка новых релизов
+    public LiveData<Resource<List<AlbumEntity>>> loadNewReleases(int limit, int offset) {
+        MutableLiveData<Resource<List<AlbumEntity>>> result = new MutableLiveData<>();
+        result.setValue(Resource.loading(null));
+
+        RetrofitClient.api().getNewReleases(limit, offset)
+                .enqueue(new Callback<NewReleasesResponse>() {
+                    @Override
+                    public void onResponse(Call<NewReleasesResponse> call,
+                                           Response<NewReleasesResponse> response) {
+                        if (response.isSuccessful() && response.body() != null) {
+                            NewReleasesResponse body = response.body();
+
+                            if (body.getAlbums() != null &&
+                                    body.getAlbums().getItems() != null) {
+
+                                List<AlbumDto> albumDtos = body.getAlbums().getItems();
+                                List<AlbumEntity> albums = AlbumMapper.toEntityList(albumDtos);
+
+                                new Thread(() -> {
+                                    database.albumDao().insertAll(albums);
+                                    Log.d(TAG, "Saved new releases to database: " + albums.size());
+                                }).start();
+
+                                result.setValue(Resource.success(albums));
+                                Log.d(TAG, "Loaded new releases: " + albums.size());
+                            } else {
+                                result.setValue(Resource.error("No new releases found", null));
+                            }
+                        } else {
+                            result.setValue(Resource.error("Failed to load new releases", null));
+                            Log.e(TAG, "API error: " + response.code());
+                        }
+                    }
+
+                    @Override
+                    public void onFailure(Call<NewReleasesResponse> call, Throwable t) {
+                        result.setValue(Resource.error("Network error: " + t.getMessage(), null));
+                        Log.e(TAG, "Network error: " + t.getMessage());
+                    }
+                });
 
         return result;
     }
@@ -123,6 +160,12 @@ public class AlbumRepository {
                         if (response.isSuccessful() && response.body() != null) {
                             List<AlbumDto> albumDtos = response.body().getAlbums();
                             List<AlbumEntity> albums = AlbumMapper.toEntityList(albumDtos);
+
+                            // Сохраняем результаты поиска в БД
+                            new Thread(() -> {
+                                database.albumDao().insertAll(albums);
+                            }).start();
+
                             result.setValue(Resource.success(albums));
                             Log.d(TAG, "Search results: " + albums.size());
                         } else {

@@ -14,7 +14,7 @@
 
         <com.google.android.material.appbar.CollapsingToolbarLayout
             android:layout_width="match_parent"
-            android:layout_height="300dp"
+            android:layout_height="350dp"
             app:contentScrim="@color/background_dark"
             app:layout_scrollFlags="scroll|exitUntilCollapsed">
 
@@ -29,7 +29,7 @@
             <!-- Gradient overlay -->
             <View
                 android:layout_width="match_parent"
-                android:layout_height="100dp"
+                android:layout_height="150dp"
                 android:layout_gravity="bottom"
                 android:background="@drawable/gradient_overlay" />
 
@@ -41,11 +41,12 @@
 
                 <ImageView
                     android:id="@+id/backButton"
-                    android:layout_width="32dp"
-                    android:layout_height="32dp"
+                    android:layout_width="40dp"
+                    android:layout_height="40dp"
                     android:src="@drawable/ic_arrow_back"
-                    android:tint="@color/text_primary"
-                    android:padding="4dp" />
+                    android:padding="8dp"
+                    android:background="?attr/selectableItemBackgroundBorderless"
+                    app:tint="@color/text_primary" />
             </androidx.appcompat.widget.Toolbar>
 
         </com.google.android.material.appbar.CollapsingToolbarLayout>
@@ -62,7 +63,7 @@
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:orientation="vertical"
-            android:padding="16dp">
+            android:padding="20dp">
 
             <!-- Album Title -->
             <TextView
@@ -71,45 +72,63 @@
                 android:layout_height="wrap_content"
                 android:text="Album Title"
                 android:textColor="@color/text_primary"
-                android:textSize="24sp"
-                android:textStyle="bold" />
+                android:textSize="28sp"
+                android:textStyle="bold"
+                android:lineSpacingExtra="4dp" />
 
             <!-- Artist Name -->
             <TextView
                 android:id="@+id/artistName"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_marginTop="4dp"
+                android:layout_marginTop="8dp"
                 android:text="Artist Name"
-                android:textColor="@color/text_secondary"
-                android:textSize="16sp" />
+                android:textColor="@color/spotify_green"
+                android:textSize="18sp"
+                android:textStyle="bold" />
 
             <!-- Album Info -->
             <TextView
                 android:id="@+id/albumInfo"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_marginTop="4dp"
-                android:text="2011 • 15 tracks"
+                android:layout_marginTop="8dp"
+                android:text="2011 • 15 tracks • Electronic"
                 android:textColor="@color/text_secondary"
                 android:textSize="14sp" />
 
-            <!-- Tracks List -->
+            <!-- Divider -->
+            <View
+                android:layout_width="match_parent"
+                android:layout_height="1dp"
+                android:layout_marginTop="24dp"
+                android:layout_marginBottom="16dp"
+                android:background="@color/border_color" />
+
+            <!-- Tracks Header -->
             <TextView
+                android:id="@+id/tracksHeader"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_marginTop="24dp"
                 android:text="Tracks"
                 android:textColor="@color/text_primary"
-                android:textSize="18sp"
-                android:textStyle="bold" />
+                android:textSize="20sp"
+                android:textStyle="bold"
+                android:visibility="gone" />
 
-            <androidx.recyclerview.widget.RecyclerView
-                android:id="@+id/tracksRecyclerView"
+            <!-- Tracks Container -->
+            <LinearLayout
+                android:id="@+id/tracksContainer"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_marginTop="8dp"
-                android:nestedScrollingEnabled="false" />
+                android:layout_marginTop="12dp"
+                android:orientation="vertical"
+                android:visibility="gone" />
+
+            <!-- Bottom Spacing -->
+            <View
+                android:layout_width="match_parent"
+                android:layout_height="80dp" />
 
         </LinearLayout>
 
@@ -129,11 +148,11 @@
         android:id="@+id/fabFavorite"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:layout_margin="16dp"
+        android:layout_margin="24dp"
+        android:layout_gravity="bottom|end"
         android:src="@drawable/ic_favorite"
         app:tint="@color/text_primary"
         app:backgroundTint="@color/spotify_green"
-        app:layout_anchor="@id/tracksRecyclerView"
-        app:layout_anchorGravity="bottom|end" />
+        app:elevation="6dp" />
 
 </androidx.coordinatorlayout.widget.CoordinatorLayout>
