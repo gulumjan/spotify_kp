@@ -28,7 +28,9 @@ import com.example.spotify_kp.ui.details.DetailsActivity;
 import com.example.spotify_kp.utils.Constants;
 
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 
 public class NewReleasesFragment extends Fragment implements AlbumAdapter.OnAlbumClickListener {
 
@@ -115,6 +117,9 @@ public class NewReleasesFragment extends Fragment implements AlbumAdapter.OnAlbu
         });
     }
 
+    /**
+     * ✅ ИСПРАВЛЕНИЕ: Фильтрация без дубликатов
+     */
     private void filterReleases(String query) {
         if (query.isEmpty()) {
             adapter.setAlbums(allReleases);
@@ -122,12 +127,19 @@ public class NewReleasesFragment extends Fragment implements AlbumAdapter.OnAlbu
         }
 
         String lowerQuery = query.toLowerCase();
+
+        // ✅ Используем Set для уникальности
+        Set<String> seenIds = new HashSet<>();
         List<AlbumEntity> filtered = new ArrayList<>();
 
         for (AlbumEntity album : allReleases) {
-            if (album.getTitle().toLowerCase().contains(lowerQuery) ||
-                    album.getArtist().toLowerCase().contains(lowerQuery)) {
+            // Проверяем что альбом еще не добавлен
+            if (!seenIds.contains(album.getId()) &&
+                    (album.getTitle().toLowerCase().contains(lowerQuery) ||
+                            album.getArtist().toLowerCase().contains(lowerQuery))) {
+
                 filtered.add(album);
+                seenIds.add(album.getId());
             }
         }
 
@@ -169,6 +181,9 @@ public class NewReleasesFragment extends Fragment implements AlbumAdapter.OnAlbu
         viewModel.loadNextPage();
     }
 
+    /**
+     * ✅ ИСПРАВЛЕНИЕ: Обработка данных без дубликатов
+     */
     private void observeNewReleases() {
         viewModel.getNewReleases().observe(getViewLifecycleOwner(), resource -> {
             if (resource != null) {
@@ -185,14 +200,16 @@ public class NewReleasesFragment extends Fragment implements AlbumAdapter.OnAlbu
                     case SUCCESS:
                         if (resource.getData() != null && !resource.getData().isEmpty()) {
                             showContent();
-                            allReleases = new ArrayList<>(resource.getData());
+
+                            // ✅ ИСПРАВЛЕНИЕ: Удаляем дубликаты перед показом
+                            allReleases = removeDuplicates(resource.getData());
 
                             // Применяем фильтр если есть текст в поиске
                             String searchText = searchInput.getText().toString();
                             if (!searchText.isEmpty()) {
                                 filterReleases(searchText);
                             } else {
-                                adapter.setAlbums(resource.getData());
+                                adapter.setAlbums(allReleases);
                             }
                         } else {
                             showEmpty();
@@ -207,6 +224,23 @@ public class NewReleasesFragment extends Fragment implements AlbumAdapter.OnAlbu
                 }
             }
         });
+    }
+
+    /**
+     * ✅ НОВЫЙ МЕТОД: Удаление дубликатов
+     */
+    private List<AlbumEntity> removeDuplicates(List<AlbumEntity> albums) {
+        Set<String> seenIds = new HashSet<>();
+        List<AlbumEntity> uniqueAlbums = new ArrayList<>();
+
+        for (AlbumEntity album : albums) {
+            if (!seenIds.contains(album.getId())) {
+                uniqueAlbums.add(album);
+                seenIds.add(album.getId());
+            }
+        }
+
+        return uniqueAlbums;
     }
 
     @Override

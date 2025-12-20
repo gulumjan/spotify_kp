@@ -107,7 +107,8 @@ public class CatalogFragment extends Fragment implements AlbumAdapter.OnAlbumCli
     private void setupSwipeRefresh() {
         swipeRefresh.setColorSchemeResources(R.color.spotify_green);
         swipeRefresh.setOnRefreshListener(() -> {
-            viewModel.loadAlbums();
+            // ✅ ИСПРАВЛЕНО: используем forceRefresh вместо loadAlbums
+            viewModel.forceRefresh();
         });
     }
 

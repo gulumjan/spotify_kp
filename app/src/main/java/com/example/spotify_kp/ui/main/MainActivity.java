@@ -1,10 +1,12 @@
 package com.example.spotify_kp.ui.main;
 
 import android.content.Intent;
+import android.graphics.Color;
 import android.os.Bundle;
 import android.util.Log;
 import android.view.View;
 import android.widget.ImageView;
+import android.widget.LinearLayout;
 import android.widget.TextView;
 
 import androidx.appcompat.app.AppCompatActivity;
@@ -13,15 +15,21 @@ import androidx.fragment.app.Fragment;
 import com.bumptech.glide.Glide;
 import com.example.spotify_kp.R;
 import com.example.spotify_kp.data.remote.RetrofitClient;
+import com.example.spotify_kp.data.repository.AlbumRepository;
 import com.example.spotify_kp.model.User;
 import com.example.spotify_kp.ui.auth.LoginActivity;
 import com.example.spotify_kp.ui.catalog.CatalogFragment;
 import com.example.spotify_kp.ui.favorites.FavoritesFragment;
 import com.example.spotify_kp.ui.newreleases.NewReleasesFragment;
+import com.example.spotify_kp.utils.NetworkUtils;
 import com.example.spotify_kp.utils.SharedPrefsManager;
 import com.google.android.material.bottomnavigation.BottomNavigationView;
+import com.google.android.material.snackbar.Snackbar;
 
+import java.text.SimpleDateFormat;
 import java.util.Calendar;
+import java.util.Date;
+import java.util.Locale;
 
 import de.hdodenhof.circleimageview.CircleImageView;
 import retrofit2.Call;
@@ -38,7 +46,12 @@ public class MainActivity extends AppCompatActivity {
     private ImageView settingsIcon;
     private BottomNavigationView bottomNavigation;
 
+    // ✅ Офлайн индикатор
+    private LinearLayout offlineIndicator;
+    private TextView offlineText;
+
     private SharedPrefsManager prefsManager;
+    private AlbumRepository albumRepository;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -46,15 +59,23 @@ public class MainActivity extends AppCompatActivity {
         setContentView(R.layout.activity_main);
 
         prefsManager = SharedPrefsManager.getInstance(this);
+        albumRepository = new AlbumRepository(this);
 
         initViews();
         setupHeader();
         setupBottomNavigation();
+        setupOfflineIndicator();
 
         // Загружаем CatalogFragment по умолчанию
         if (savedInstanceState == null) {
             loadFragment(new CatalogFragment());
         }
+    }
+
+    @Override
+    protected void onResume() {
+        super.onResume();
+        updateOfflineIndicator();
     }
 
     private void initViews() {
@@ -64,6 +85,10 @@ public class MainActivity extends AppCompatActivity {
         profileImage = headerView.findViewById(R.id.profileImage);
         settingsIcon = headerView.findViewById(R.id.settingsIcon);
         bottomNavigation = findViewById(R.id.bottomNavigation);
+
+        // ✅ Инициализация офлайн индикатора
+        offlineIndicator = findViewById(R.id.offlineIndicator);
+        offlineText = findViewById(R.id.offlineText);
     }
 
     private void setupHeader() {
@@ -140,7 +165,12 @@ public class MainActivity extends AppCompatActivity {
                     .into(profileImage);
         }
 
-        // Затем обновляем с сервера
+        // Затем обновляем с сервера (только если есть интернет)
+        if (!NetworkUtils.isNetworkAvailable(this)) {
+            Log.d(TAG, "📶 Offline mode - using cached profile");
+            return;
+        }
+
         RetrofitClient.api().getUserProfile().enqueue(new Callback<User>() {
             @Override
             public void onResponse(Call<User> call, Response<User> response) {
@@ -173,8 +203,85 @@ public class MainActivity extends AppCompatActivity {
             @Override
             public void onFailure(Call<User> call, Throwable t) {
                 Log.e(TAG, "Network failure: " + t.getMessage());
-                t.printStackTrace();
             }
         });
+    }
+
+    /**
+     * ✅ Настройка индикатора офлайн-режима
+     */
+    private void setupOfflineIndicator() {
+        if (offlineIndicator == null || offlineText == null) {
+            Log.w(TAG, "⚠️ Offline indicator views not found");
+            return;
+        }
+
+        updateOfflineIndicator();
+
+        // Клик по индикатору для обновления
+        offlineIndicator.setOnClickListener(v -> {
+            if (NetworkUtils.isNetworkAvailable(this)) {
+                Snackbar.make(v, "🔄 Refreshing data...", Snackbar.LENGTH_SHORT).show();
+
+                // Перезагружаем текущий фрагмент
+                Fragment currentFragment = getSupportFragmentManager()
+                        .findFragmentById(R.id.fragmentContainer);
+
+                if (currentFragment instanceof CatalogFragment) {
+                    loadFragment(new CatalogFragment());
+                }
+
+                updateOfflineIndicator();
+            } else {
+                Snackbar.make(v, "📶 No internet connection", Snackbar.LENGTH_SHORT).show();
+            }
+        });
+    }
+
+    /**
+     * ✅ Обновление индикатора офлайн-режима
+     */
+    private void updateOfflineIndicator() {
+        if (offlineIndicator == null || offlineText == null) {
+            return;
+        }
+
+        boolean isOnline = NetworkUtils.isNetworkAvailable(this);
+
+        if (!isOnline) {
+            // Офлайн режим
+            offlineIndicator.setVisibility(View.VISIBLE);
+            offlineIndicator.setBackgroundColor(Color.parseColor("#FF6B6B"));
+            offlineText.setText("📶 Offline Mode - Tap to sync when online");
+            Log.d(TAG, "📶 Offline mode indicator shown");
+        } else {
+            // Онлайн - проверяем когда была последняя синхронизация
+            long lastSync = albumRepository.getLastSyncTime();
+
+            if (lastSync == 0) {
+                // Никогда не синхронизировали
+                offlineIndicator.setVisibility(View.VISIBLE);
+                offlineIndicator.setBackgroundColor(Color.parseColor("#FFA726"));
+                offlineText.setText("⚠️ Tap to sync data");
+            } else {
+                // Данные есть - показываем время последней синхронизации
+                SimpleDateFormat sdf = new SimpleDateFormat("MMM dd, HH:mm", Locale.getDefault());
+                String lastSyncStr = sdf.format(new Date(lastSync));
+
+                long timeSinceSync = System.currentTimeMillis() - lastSync;
+                long hours = timeSinceSync / (1000 * 60 * 60);
+
+                if (hours > 24) {
+                    // Данные устарели
+                    offlineIndicator.setVisibility(View.VISIBLE);
+                    offlineIndicator.setBackgroundColor(Color.parseColor("#66BB6A"));
+                    offlineText.setText("🔄 Last sync: " + lastSyncStr + " - Tap to update");
+                } else {
+                    // Данные свежие
+                    offlineIndicator.setVisibility(View.GONE);
+                }
+            }
+            Log.d(TAG, "✅ Online mode, last sync: " + new Date(lastSync));
+        }
     }
 }
