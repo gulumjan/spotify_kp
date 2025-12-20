@@ -2,10 +2,13 @@ package com.example.spotify_kp.ui.newreleases;
 
 import android.content.Intent;
 import android.os.Bundle;
+import android.text.Editable;
+import android.text.TextWatcher;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
 import android.widget.Button;
+import android.widget.EditText;
 import android.widget.LinearLayout;
 import android.widget.ProgressBar;
 import android.widget.TextView;
@@ -24,6 +27,9 @@ import com.example.spotify_kp.ui.catalog.adapter.AlbumAdapter;
 import com.example.spotify_kp.ui.details.DetailsActivity;
 import com.example.spotify_kp.utils.Constants;
 
+import java.util.ArrayList;
+import java.util.List;
+
 public class NewReleasesFragment extends Fragment implements AlbumAdapter.OnAlbumClickListener {
 
     private NewReleasesViewModel viewModel;
@@ -37,7 +43,9 @@ public class NewReleasesFragment extends Fragment implements AlbumAdapter.OnAlbu
     private TextView errorText;
     private Button retryButton;
     private TextView headerTitle;
+    private EditText searchInput;
 
+    private List<AlbumEntity> allReleases = new ArrayList<>();
     private boolean isLoadingMore = false;
 
     @Nullable
@@ -56,6 +64,7 @@ public class NewReleasesFragment extends Fragment implements AlbumAdapter.OnAlbu
         setupRecyclerView();
         setupSwipeRefresh();
         setupScrollListener();
+        setupSearchInput();
         observeNewReleases();
 
         viewModel.loadNewReleases();
@@ -63,6 +72,7 @@ public class NewReleasesFragment extends Fragment implements AlbumAdapter.OnAlbu
 
     private void initViews(View view) {
         headerTitle = view.findViewById(R.id.headerTitle);
+        searchInput = view.findViewById(R.id.searchInput);
         swipeRefresh = view.findViewById(R.id.swipeRefresh);
         recyclerView = view.findViewById(R.id.recyclerView);
         progressBar = view.findViewById(R.id.progressBar);
@@ -88,6 +98,46 @@ public class NewReleasesFragment extends Fragment implements AlbumAdapter.OnAlbu
         swipeRefresh.setOnRefreshListener(() -> {
             viewModel.loadNewReleases();
         });
+    }
+
+    private void setupSearchInput() {
+        searchInput.addTextChangedListener(new TextWatcher() {
+            @Override
+            public void beforeTextChanged(CharSequence s, int start, int count, int after) {}
+
+            @Override
+            public void onTextChanged(CharSequence s, int start, int before, int count) {
+                filterReleases(s.toString());
+            }
+
+            @Override
+            public void afterTextChanged(Editable s) {}
+        });
+    }
+
+    private void filterReleases(String query) {
+        if (query.isEmpty()) {
+            adapter.setAlbums(allReleases);
+            return;
+        }
+
+        String lowerQuery = query.toLowerCase();
+        List<AlbumEntity> filtered = new ArrayList<>();
+
+        for (AlbumEntity album : allReleases) {
+            if (album.getTitle().toLowerCase().contains(lowerQuery) ||
+                    album.getArtist().toLowerCase().contains(lowerQuery)) {
+                filtered.add(album);
+            }
+        }
+
+        adapter.setAlbums(filtered);
+
+        if (filtered.isEmpty()) {
+            showEmpty();
+        } else {
+            showContent();
+        }
     }
 
     private void setupScrollListener() {
@@ -135,7 +185,15 @@ public class NewReleasesFragment extends Fragment implements AlbumAdapter.OnAlbu
                     case SUCCESS:
                         if (resource.getData() != null && !resource.getData().isEmpty()) {
                             showContent();
-                            adapter.setAlbums(resource.getData());
+                            allReleases = new ArrayList<>(resource.getData());
+
+                            // Применяем фильтр если есть текст в поиске
+                            String searchText = searchInput.getText().toString();
+                            if (!searchText.isEmpty()) {
+                                filterReleases(searchText);
+                            } else {
+                                adapter.setAlbums(resource.getData());
+                            }
                         } else {
                             showEmpty();
                         }

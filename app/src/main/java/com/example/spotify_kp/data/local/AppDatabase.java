@@ -35,6 +35,8 @@ public abstract class AppDatabase extends RoomDatabase {
                             Constants.DATABASE_NAME
                     )
                     .fallbackToDestructiveMigration()
+                    .allowMainThreadQueries() // ✅ Разрешаем работу в main thread для офлайн работы
+                    .setJournalMode(JournalMode.TRUNCATE) // ✅ БЕЗ WAL! Прямая запись на диск!
                     .build();
         }
         return instance;

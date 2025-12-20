@@ -5,7 +5,7 @@ import android.app.Application;
 import androidx.annotation.NonNull;
 import androidx.lifecycle.AndroidViewModel;
 import androidx.lifecycle.LiveData;
-import androidx.lifecycle.MutableLiveData;
+import androidx.lifecycle.MediatorLiveData;
 
 import com.example.spotify_kp.data.local.entity.AlbumEntity;
 import com.example.spotify_kp.data.repository.NewReleasesRepository;
@@ -17,16 +17,18 @@ import java.util.List;
 public class NewReleasesViewModel extends AndroidViewModel {
 
     private NewReleasesRepository repository;
-    private MutableLiveData<Resource<List<AlbumEntity>>> newReleases;
+    private MediatorLiveData<Resource<List<AlbumEntity>>> newReleases;
+    private LiveData<Resource<List<AlbumEntity>>> currentSource;
 
     private int currentOffset = 0;
     private static final int PAGE_SIZE = 10;
     private boolean isLoading = false;
+    private List<AlbumEntity> allLoadedReleases = new ArrayList<>();
 
     public NewReleasesViewModel(@NonNull Application application) {
         super(application);
         repository = new NewReleasesRepository(application);
-        newReleases = new MutableLiveData<>();
+        newReleases = new MediatorLiveData<>();
     }
 
     public LiveData<Resource<List<AlbumEntity>>> getNewReleases() {
@@ -35,9 +37,20 @@ public class NewReleasesViewModel extends AndroidViewModel {
 
     public void loadNewReleases() {
         currentOffset = 0;
+        allLoadedReleases.clear();
         isLoading = true;
 
-        repository.loadNewReleases(PAGE_SIZE, currentOffset).observeForever(resource -> {
+        if (currentSource != null) {
+            newReleases.removeSource(currentSource);
+        }
+
+        currentSource = repository.loadNewReleases(PAGE_SIZE, currentOffset);
+        newReleases.addSource(currentSource, resource -> {
+            if (resource != null && resource.getStatus() == Resource.Status.SUCCESS) {
+                if (resource.getData() != null) {
+                    allLoadedReleases = new ArrayList<>(resource.getData());
+                }
+            }
             newReleases.setValue(resource);
             isLoading = false;
         });
@@ -49,20 +62,16 @@ public class NewReleasesViewModel extends AndroidViewModel {
         isLoading = true;
         currentOffset += PAGE_SIZE;
 
-        repository.loadNewReleases(PAGE_SIZE, currentOffset).observeForever(resource -> {
-            if (resource.getStatus() == Resource.Status.SUCCESS && resource.getData() != null) {
-                // Добавляем новые данные к существующим
-                List<AlbumEntity> currentData = newReleases.getValue() != null
-                        ? newReleases.getValue().getData()
-                        : new ArrayList<>();
+        if (currentSource != null) {
+            newReleases.removeSource(currentSource);
+        }
 
-                if (currentData == null) {
-                    currentData = new ArrayList<>();
-                }
-
-                List<AlbumEntity> combined = new ArrayList<>(currentData);
+        currentSource = repository.loadNewReleases(PAGE_SIZE, currentOffset);
+        newReleases.addSource(currentSource, resource -> {
+            if (resource != null && resource.getStatus() == Resource.Status.SUCCESS && resource.getData() != null) {
+                List<AlbumEntity> combined = new ArrayList<>(allLoadedReleases);
                 combined.addAll(resource.getData());
-
+                allLoadedReleases = combined;
                 newReleases.setValue(Resource.success(combined));
             } else {
                 newReleases.setValue(resource);
@@ -73,5 +82,13 @@ public class NewReleasesViewModel extends AndroidViewModel {
 
     public boolean isLoading() {
         return isLoading;
+    }
+
+    @Override
+    protected void onCleared() {
+        super.onCleared();
+        if (currentSource != null) {
+            newReleases.removeSource(currentSource);
+        }
     }
 }

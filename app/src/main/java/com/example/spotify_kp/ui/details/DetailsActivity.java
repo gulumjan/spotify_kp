@@ -55,7 +55,7 @@ public class DetailsActivity extends AppCompatActivity {
             return;
         }
 
-        Log.d(TAG, "Opening album: " + albumId);
+        Log.d(TAG, "🎵 Opening album: " + albumId);
 
         initViews();
         setupViewModel();
@@ -63,6 +63,15 @@ public class DetailsActivity extends AppCompatActivity {
         setupObservers();
 
         viewModel.loadAlbumDetails(albumId);
+    }
+
+    @Override
+    protected void onResume() {
+        super.onResume();
+        Log.d(TAG, "▶️ onResume - checking favorite status");
+
+        // Перепроверяем статус при возврате на экран
+        checkFavoriteStatus();
     }
 
     private void initViews() {
@@ -76,7 +85,10 @@ public class DetailsActivity extends AppCompatActivity {
         fabFavorite = findViewById(R.id.fabFavorite);
         backButton = findViewById(R.id.backButton);
 
-        backButton.setOnClickListener(v -> finish());
+        backButton.setOnClickListener(v -> {
+            Log.d(TAG, "⬅️ Back button pressed");
+            finish();
+        });
     }
 
     private void setupViewModel() {
@@ -111,13 +123,18 @@ public class DetailsActivity extends AppCompatActivity {
             }
         });
 
-        // Observe favorite status
-        favoriteRepository.isAlbumFavorite(albumId).observe(this, isFav -> {
-            if (isFav != null) {
-                isFavorite = isFav;
-                updateFabIcon();
-            }
-        });
+        // Проверяем статус избранного
+        checkFavoriteStatus();
+    }
+
+    private void checkFavoriteStatus() {
+        Log.d(TAG, "🔍 Checking favorite status");
+
+        // СИНХРОННО проверяем статус
+        isFavorite = favoriteRepository.isAlbumFavoriteSync(albumId);
+        updateFabIcon();
+
+        Log.d(TAG, "❤️ Is favorite: " + isFavorite);
     }
 
     private void displayAlbumDetails(AlbumEntity album) {
@@ -127,11 +144,10 @@ public class DetailsActivity extends AppCompatActivity {
         albumTitle.setText(currentAlbumTitle);
         artistName.setText(currentArtistName);
 
-        // Year and track count
         String year = album.getYear() != null ? album.getYear() : "Unknown";
         albumInfo.setText(year + " • " + album.getTotalTracks() + " tracks • " + album.getGenre());
 
-        // Cover
+        // Загружаем обложку
         Glide.with(this)
                 .load(album.getCoverUrl())
                 .placeholder(R.drawable.ic_music)
@@ -142,32 +158,22 @@ public class DetailsActivity extends AppCompatActivity {
         tracksHeader.setVisibility(View.VISIBLE);
         tracksContainer.setVisibility(View.VISIBLE);
 
-        // Генерируем треки с названием альбома и исполнителя
-        generateSampleTracks(album.getTotalTracks(), album.getTitle(), album.getArtist());
+        // Генерируем треки
+        generateSampleTracks(album.getTotalTracks(), album.getArtist());
 
+        // Настраиваем FAB
         setupFabListener();
     }
 
-    private void generateSampleTracks(int trackCount, String albumTitle, String artistName) {
+    private void generateSampleTracks(int trackCount, String artistName) {
         tracksContainer.removeAllViews();
 
-        // Списки слов для разных стилей названий
-        String[] adjectives = {
-                "Lost", "Wild", "Broken", "Golden", "Silent", "Electric", "Midnight",
-                "Burning", "Endless", "Shining", "Frozen", "Sacred", "Fallen", "Rising"
+        String[] trackNames = {
+                "Lost Heart", "Wild Dreams", "Golden Lights", "Silent Soul", "Electric Fire",
+                "Broken Time", "Midnight Rain", "Endless Stars", "Sacred Night", "Fallen Love"
         };
 
-        String[] nouns = {
-                "Heart", "Dreams", "Lights", "Soul", "Fire", "Rain", "Stars",
-                "Night", "Love", "Time", "Hope", "Sky", "Ocean", "Memory"
-        };
-
-        String[] verbs = {
-                "Dancing", "Running", "Falling", "Flying", "Waiting", "Breathing",
-                "Chasing", "Dreaming", "Breaking", "Fading", "Shining", "Calling"
-        };
-
-        for (int i = 1; i <= trackCount; i++) {
+        for (int i = 1; i <= Math.min(trackCount, 10); i++) {
             View trackView = getLayoutInflater().inflate(R.layout.item_track_detailed, tracksContainer, false);
 
             TextView trackNumber = trackView.findViewById(R.id.trackNumber);
@@ -176,34 +182,11 @@ public class DetailsActivity extends AppCompatActivity {
             TextView trackDuration = trackView.findViewById(R.id.trackDuration);
 
             trackNumber.setText(String.valueOf(i));
+            trackName.setText(trackNames[i % trackNames.length]);
+            trackArtist.setText(artistName);
 
-            // Генерируем реалистичное название трека
-            String trackTitle;
-            int styleType = (int)(Math.random() * 4);
-
-            switch (styleType) {
-                case 0: // Прилагательное + Существительное
-                    trackTitle = adjectives[(int)(Math.random() * adjectives.length)] + " " +
-                            nouns[(int)(Math.random() * nouns.length)];
-                    break;
-                case 1: // Глагол + Существительное
-                    trackTitle = verbs[(int)(Math.random() * verbs.length)] + " " +
-                            nouns[(int)(Math.random() * nouns.length)];
-                    break;
-                case 2: // Просто существительное
-                    trackTitle = nouns[(int)(Math.random() * nouns.length)];
-                    break;
-                default: // Прилагательное + Глагол
-                    trackTitle = adjectives[(int)(Math.random() * adjectives.length)] + " " +
-                            verbs[(int)(Math.random() * verbs.length)];
-                    break;
-            }
-
-            trackName.setText(trackTitle);
-            trackArtist.setText(artistName); // Показываем реального исполнителя
-
-            // Генерируем случайную длительность трека (2-5 минут)
-            int minutes = 2 + (int)(Math.random() * 4);
+            // Случайная длительность
+            int minutes = 2 + (int)(Math.random() * 3);
             int seconds = (int)(Math.random() * 60);
             trackDuration.setText(String.format("%d:%02d", minutes, seconds));
 
@@ -214,11 +197,20 @@ public class DetailsActivity extends AppCompatActivity {
     private void setupFabListener() {
         fabFavorite.setOnClickListener(v -> {
             if (isFavorite) {
-                // Remove from favorites
-                favoriteRepository.removeFromFavorites(albumId);
-                Toast.makeText(this, "Removed from favorites", Toast.LENGTH_SHORT).show();
+                // Удалить из избранного
+                Log.d(TAG, "🗑️ Removing from favorites");
+
+                boolean success = favoriteRepository.removeFromFavoritesSync(albumId);
+
+                if (success) {
+                    Toast.makeText(this, "Removed from favorites", Toast.LENGTH_SHORT).show();
+                    checkFavoriteStatus();
+                } else {
+                    Toast.makeText(this, "Failed to remove", Toast.LENGTH_SHORT).show();
+                }
             } else {
-                // Show dialog to add to favorites
+                // Добавить в избранное
+                Log.d(TAG, "➕ Adding to favorites");
                 showAddToFavoriteDialog();
             }
         });
@@ -230,18 +222,41 @@ public class DetailsActivity extends AppCompatActivity {
                 currentAlbumTitle,
                 currentArtistName,
                 (comment, rating) -> {
-                    favoriteRepository.addToFavorites(albumId, comment, rating);
-                    Toast.makeText(this, "Added to favorites!", Toast.LENGTH_SHORT).show();
+                    Log.d(TAG, "💾 Saving favorite with rating: " + rating);
+
+                    // СИНХРОННО сохраняем
+                    boolean success = favoriteRepository.addToFavoritesSync(albumId, comment, rating);
+
+                    if (success) {
+                        Toast.makeText(this, "Added to favorites!", Toast.LENGTH_SHORT).show();
+                        checkFavoriteStatus();
+                    } else {
+                        Toast.makeText(this, "Failed to add", Toast.LENGTH_SHORT).show();
+                    }
                 }
         );
         dialog.show();
     }
 
     private void updateFabIcon() {
+        Log.d(TAG, "🎨 Updating FAB icon. isFavorite: " + isFavorite);
+
         if (isFavorite) {
             fabFavorite.setImageResource(R.drawable.ic_favorite_filled);
         } else {
             fabFavorite.setImageResource(R.drawable.ic_favorite);
         }
+    }
+
+    @Override
+    protected void onPause() {
+        super.onPause();
+        Log.d(TAG, "⏸️ onPause");
+    }
+
+    @Override
+    protected void onDestroy() {
+        super.onDestroy();
+        Log.d(TAG, "💀 onDestroy");
     }
 }

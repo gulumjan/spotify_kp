@@ -5,7 +5,7 @@ import android.app.Application;
 import androidx.annotation.NonNull;
 import androidx.lifecycle.AndroidViewModel;
 import androidx.lifecycle.LiveData;
-import androidx.lifecycle.MutableLiveData;
+import androidx.lifecycle.MediatorLiveData;
 
 import com.example.spotify_kp.data.local.entity.AlbumEntity;
 import com.example.spotify_kp.data.repository.AlbumRepository;
@@ -16,12 +16,17 @@ import java.util.List;
 public class CatalogViewModel extends AndroidViewModel {
 
     private AlbumRepository albumRepository;
-    private MutableLiveData<Resource<List<AlbumEntity>>> albums;
+    private MediatorLiveData<Resource<List<AlbumEntity>>> albums;
+    private LiveData<Resource<List<AlbumEntity>>> currentSource;
+
+    // Для фильтрации
+    private String currentGenre = null;
+    private String currentYear = null;
 
     public CatalogViewModel(@NonNull Application application) {
         super(application);
         albumRepository = new AlbumRepository(application);
-        albums = new MutableLiveData<>();
+        albums = new MediatorLiveData<>();
     }
 
     public LiveData<Resource<List<AlbumEntity>>> getAlbums() {
@@ -29,18 +34,66 @@ public class CatalogViewModel extends AndroidViewModel {
     }
 
     public void loadAlbums() {
-        albumRepository.loadAlbums().observeForever(resource -> {
-            albums.setValue(resource);
-        });
+        if (currentSource != null) {
+            albums.removeSource(currentSource);
+        }
+
+        currentSource = albumRepository.loadAlbums();
+        albums.addSource(currentSource, albums::setValue);
     }
 
     public void searchAlbums(String query) {
-        albumRepository.searchAlbums(query).observeForever(resource -> {
-            albums.setValue(resource);
-        });
+        if (currentSource != null) {
+            albums.removeSource(currentSource);
+        }
+
+        currentSource = albumRepository.searchAlbums(query);
+        albums.addSource(currentSource, albums::setValue);
+    }
+
+    public void filterByGenre(String genre) {
+        if (currentSource != null) {
+            albums.removeSource(currentSource);
+        }
+
+        currentGenre = genre;
+        currentSource = albumRepository.getAlbumsByGenre(genre);
+        albums.addSource(currentSource, albums::setValue);
+    }
+
+    public void filterByYear(String year) {
+        if (currentSource != null) {
+            albums.removeSource(currentSource);
+        }
+
+        currentYear = year;
+        currentSource = albumRepository.getAlbumsByYear(year);
+        albums.addSource(currentSource, albums::setValue);
+    }
+
+    public void clearFilters() {
+        currentGenre = null;
+        currentYear = null;
+        loadAlbums();
+    }
+
+    public String getCurrentGenre() {
+        return currentGenre;
+    }
+
+    public String getCurrentYear() {
+        return currentYear;
     }
 
     public LiveData<List<AlbumEntity>> getAllAlbumsFromDb() {
         return albumRepository.getAllAlbumsFromDb();
+    }
+
+    @Override
+    protected void onCleared() {
+        super.onCleared();
+        if (currentSource != null) {
+            albums.removeSource(currentSource);
+        }
     }
 }

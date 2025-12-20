@@ -2,7 +2,6 @@ package com.example.spotify_kp.data.local.dao;
 
 import androidx.lifecycle.LiveData;
 import androidx.room.Dao;
-import androidx.room.Delete;
 import androidx.room.Insert;
 import androidx.room.OnConflictStrategy;
 import androidx.room.Query;
@@ -16,40 +15,35 @@ import java.util.List;
 public interface FavoriteDao {
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
-    void insert(FavoriteEntity favorite);
+    long insert(FavoriteEntity favorite);
 
     @Update
     void update(FavoriteEntity favorite);
 
-    @Delete
-    void delete(FavoriteEntity favorite);
+    @Query("DELETE FROM favorites WHERE album_id = :albumId AND user_id = :userId")
+    void removeFavorite(String albumId, String userId);
 
     @Query("SELECT * FROM favorites WHERE user_id = :userId ORDER BY added_date DESC")
     LiveData<List<FavoriteEntity>> getFavoritesByUser(String userId);
 
-    @Query("SELECT * FROM favorites WHERE album_id = :albumId AND user_id = :userId LIMIT 1")
-    LiveData<FavoriteEntity> getFavoriteByAlbum(String albumId, String userId);
+    @Query("SELECT * FROM favorites WHERE user_id = :userId ORDER BY added_date DESC")
+    List<FavoriteEntity> getFavoritesByUserSync(String userId);
 
     @Query("SELECT * FROM favorites WHERE album_id = :albumId AND user_id = :userId LIMIT 1")
     FavoriteEntity getFavoriteByAlbumSync(String albumId, String userId);
 
+    @Query("SELECT * FROM favorites WHERE album_id = :albumId AND user_id = :userId LIMIT 1")
+    LiveData<FavoriteEntity> getFavoriteByAlbum(String albumId, String userId);
+
     @Query("SELECT EXISTS(SELECT 1 FROM favorites WHERE album_id = :albumId AND user_id = :userId)")
     LiveData<Boolean> isAlbumFavorite(String albumId, String userId);
+
+    @Query("SELECT EXISTS(SELECT 1 FROM favorites WHERE album_id = :albumId AND user_id = :userId)")
+    boolean isAlbumFavoriteSync(String albumId, String userId);
 
     @Query("SELECT COUNT(*) FROM favorites WHERE user_id = :userId")
     int getFavoritesCountSync(String userId);
 
-    @Query("DELETE FROM favorites WHERE album_id = :albumId AND user_id = :userId")
-    void removeFavorite(String albumId, String userId);
-
     @Query("DELETE FROM favorites WHERE user_id = :userId")
     void deleteAllByUser(String userId);
-
-    // Получить избранные альбомы с рейтингом выше заданного
-    @Query("SELECT * FROM favorites WHERE user_id = :userId AND user_rating >= :minRating ORDER BY user_rating DESC")
-    LiveData<List<FavoriteEntity>> getFavoritesByRating(String userId, float minRating);
-
-    // Получить последние добавленные избранные
-    @Query("SELECT * FROM favorites WHERE user_id = :userId ORDER BY added_date DESC LIMIT :limit")
-    LiveData<List<FavoriteEntity>> getRecentFavorites(String userId, int limit);
 }
