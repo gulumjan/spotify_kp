@@ -3,9 +3,6 @@ package com.example.spotify_kp.data.repository;
 import android.content.Context;
 import android.util.Log;
 
-import androidx.lifecycle.LiveData;
-import androidx.lifecycle.MutableLiveData;
-
 import com.example.spotify_kp.data.local.AppDatabase;
 import com.example.spotify_kp.data.local.entity.FavoriteEntity;
 import com.example.spotify_kp.utils.SharedPrefsManager;
@@ -21,85 +18,152 @@ public class FavoriteRepository {
     public FavoriteRepository(Context context) {
         this.database = AppDatabase.getInstance(context);
         this.prefsManager = SharedPrefsManager.getInstance(context);
+
+        Log.d(TAG, "✅ FavoriteRepository created for user: " + prefsManager.getUserId());
     }
 
-    // Добавить альбом в избранное
-    public void addToFavorites(String albumId, String comment, float rating) {
-        new Thread(() -> {
-            FavoriteEntity favorite = new FavoriteEntity();
-            favorite.setAlbumId(albumId);
-            favorite.setUserId(prefsManager.getUserId());
-            favorite.setUserComment(comment);
-            favorite.setUserRating(rating);
-            favorite.setAddedDate(System.currentTimeMillis());
-            favorite.setFavorite(true);
-
-            database.favoriteDao().insert(favorite);
-            Log.d(TAG, "Album added to favorites: " + albumId + " with rating: " + rating);
-        }).start();
-    }
-
-    // Удалить из избранного
-    public void removeFromFavorites(String albumId) {
-        new Thread(() -> {
+    // Добавить в избранное - СИНХРОННО через DAO
+    public boolean addToFavoritesSync(String albumId, String comment, float rating) {
+        try {
             String userId = prefsManager.getUserId();
+            Log.d(TAG, "🔵 START: Adding " + albumId);
+
+            // Проверяем существует ли уже
+            boolean exists = database.favoriteDao().isAlbumFavoriteSync(albumId, userId);
+
+            if (exists) {
+                // Обновляем существующий через DAO
+                FavoriteEntity existing = database.favoriteDao().getFavoriteByAlbumSync(albumId, userId);
+                if (existing != null) {
+                    existing.setUserComment(comment);
+                    existing.setUserRating(rating);
+                    existing.setFavorite(true);
+                    database.favoriteDao().update(existing);
+                    Log.d(TAG, "📝 Updated existing favorite");
+                }
+            } else {
+                // Вставляем новый через DAO
+                FavoriteEntity favorite = new FavoriteEntity();
+                favorite.setAlbumId(albumId);
+                favorite.setUserId(userId);
+                favorite.setUserComment(comment);
+                favorite.setUserRating(rating);
+                favorite.setAddedDate(System.currentTimeMillis());
+                favorite.setFavorite(true);
+
+                database.favoriteDao().insert(favorite);
+                Log.d(TAG, "➕ Inserted new favorite");
+            }
+
+            // Проверка что реально сохранилось
+            boolean check = database.favoriteDao().isAlbumFavoriteSync(albumId, userId);
+
+            if (check) {
+                Log.d(TAG, "✅ VERIFIED: Album saved!");
+            } else {
+                Log.e(TAG, "❌ ERROR: Album NOT saved!");
+            }
+
+            // Выводим текущее количество
+            int count = database.favoriteDao().getFavoritesCountSync(userId);
+            Log.d(TAG, "📊 Total favorites in DB: " + count);
+
+            Log.d(TAG, "🔵 END: Operation complete");
+
+            return check;
+
+        } catch (Exception e) {
+            Log.e(TAG, "❌ ERROR adding to favorites: " + e.getMessage(), e);
+            return false;
+        }
+    }
+
+    // Удалить из избранного - СИНХРОННО через DAO
+    public boolean removeFromFavoritesSync(String albumId) {
+        try {
+            String userId = prefsManager.getUserId();
+            Log.d(TAG, "🗑️ Removing: " + albumId);
+
+            // Удаляем через DAO
             database.favoriteDao().removeFavorite(albumId, userId);
-            Log.d(TAG, "Album removed from favorites: " + albumId);
-        }).start();
+
+            // Проверка
+            boolean check = database.favoriteDao().isAlbumFavoriteSync(albumId, userId);
+
+            if (check) {
+                Log.e(TAG, "❌ ERROR: Album still exists after delete!");
+            } else {
+                Log.d(TAG, "✅ Successfully removed!");
+            }
+
+            return !check;
+
+        } catch (Exception e) {
+            Log.e(TAG, "❌ ERROR removing from favorites: " + e.getMessage(), e);
+            return false;
+        }
     }
 
-    // Обновить комментарий и рейтинг
-    public void updateFavorite(String albumId, String comment, float rating) {
-        new Thread(() -> {
+    // Обновить комментарий и рейтинг - СИНХРОННО через DAO
+    public void updateFavoriteSync(String albumId, String comment, float rating) {
+        try {
             String userId = prefsManager.getUserId();
+            Log.d(TAG, "✏️ Updating: " + albumId);
+
             FavoriteEntity favorite = database.favoriteDao().getFavoriteByAlbumSync(albumId, userId);
 
             if (favorite != null) {
                 favorite.setUserComment(comment);
                 favorite.setUserRating(rating);
                 database.favoriteDao().update(favorite);
-                Log.d(TAG, "Favorite updated: " + albumId);
+                Log.d(TAG, "✅ Updated successfully");
+            } else {
+                Log.w(TAG, "⚠️ Favorite not found for update");
             }
-        }).start();
+
+        } catch (Exception e) {
+            Log.e(TAG, "❌ ERROR updating favorite: " + e.getMessage(), e);
+        }
     }
 
-    // Получить все избранные альбомы
-    public LiveData<List<FavoriteEntity>> getFavorites() {
-        String userId = prefsManager.getUserId();
-        return database.favoriteDao().getFavoritesByUser(userId);
+    // Получить все избранные - СИНХРОННО через DAO
+    public List<FavoriteEntity> getAllFavoritesSync() {
+        try {
+            String userId = prefsManager.getUserId();
+
+            // Используем синхронный метод DAO
+            List<FavoriteEntity> favorites = database.favoriteDao().getFavoritesByUserSync(userId);
+
+            Log.d(TAG, "📋 Loaded " + (favorites != null ? favorites.size() : 0) + " favorites");
+
+            return favorites;
+
+        } catch (Exception e) {
+            Log.e(TAG, "❌ ERROR loading favorites: " + e.getMessage(), e);
+            return new java.util.ArrayList<>();
+        }
     }
 
-    // Проверить, находится ли альбом в избранном
-    public LiveData<Boolean> isAlbumFavorite(String albumId) {
+    // Проверить находится ли альбом в избранном - СИНХРОННО
+    public boolean isAlbumFavoriteSync(String albumId) {
         String userId = prefsManager.getUserId();
-        return database.favoriteDao().isAlbumFavorite(albumId, userId);
+        boolean isFavorite = database.favoriteDao().isAlbumFavoriteSync(albumId, userId);
+        Log.d(TAG, "❓ Is " + albumId + " favorite: " + isFavorite);
+        return isFavorite;
     }
 
-    // Получить информацию о избранном альбоме
-    public LiveData<FavoriteEntity> getFavoriteByAlbum(String albumId) {
+    // Получить количество избранных альбомов - СИНХРОННО
+    public int getFavoritesCountSync() {
         String userId = prefsManager.getUserId();
-        return database.favoriteDao().getFavoriteByAlbum(albumId, userId);
-    }
-
-    // Получить количество избранных альбомов
-    public LiveData<Integer> getFavoritesCount() {
-        MutableLiveData<Integer> result = new MutableLiveData<>();
-        String userId = prefsManager.getUserId();
-
-        new Thread(() -> {
-            int count = database.favoriteDao().getFavoritesCountSync(userId);
-            result.postValue(count);
-        }).start();
-
-        return result;
+        int count = database.favoriteDao().getFavoritesCountSync(userId);
+        Log.d(TAG, "🔢 Favorites count: " + count);
+        return count;
     }
 
     // Удалить все избранное пользователя
     public void clearAllFavorites() {
-        new Thread(() -> {
-            String userId = prefsManager.getUserId();
-            database.favoriteDao().deleteAllByUser(userId);
-            Log.d(TAG, "All favorites cleared for user: " + userId);
-        }).start();
+        String userId = prefsManager.getUserId();
+        database.favoriteDao().deleteAllByUser(userId);
+        Log.d(TAG, "🗑️ Cleared all favorites for user: " + userId);
     }
 }

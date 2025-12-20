@@ -14,8 +14,14 @@ import com.example.spotify_kp.data.local.entity.FavoriteEntity;
 import com.example.spotify_kp.data.repository.FavoriteRepository;
 
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
+/**
+ * FavoritesViewModel - управляет избранными альбомами
+ * Работает СИНХРОННО для гарантированной офлайн работы
+ */
 public class FavoritesViewModel extends AndroidViewModel {
 
     private static final String TAG = "FavoritesViewModel";
@@ -23,41 +29,97 @@ public class FavoritesViewModel extends AndroidViewModel {
     private FavoriteRepository favoriteRepository;
     private AppDatabase database;
 
+    // Вручную управляемый список favorites
+    private MutableLiveData<List<FavoriteEntity>> favoritesLiveData = new MutableLiveData<>(new ArrayList<>());
+    private Map<String, AlbumEntity> albumsCache = new HashMap<>();
+
     public FavoritesViewModel(@NonNull Application application) {
         super(application);
         favoriteRepository = new FavoriteRepository(application);
         database = AppDatabase.getInstance(application);
+
+        Log.d(TAG, "✅ FavoritesViewModel created (Activity-scoped)");
+
+        // Загружаем favorites при создании
+        loadFavorites();
+    }
+
+    /**
+     * Загрузить все favorites из БД
+     */
+    public void loadFavorites() {
+        Log.d(TAG, "📥 Loading favorites...");
+
+        // Загружаем СИНХРОННО через Repository
+        List<FavoriteEntity> favorites = favoriteRepository.getAllFavoritesSync();
+        favoritesLiveData.setValue(new ArrayList<>(favorites));
+
+        Log.d(TAG, "✅ Loaded " + favorites.size() + " favorites");
     }
 
     public LiveData<List<FavoriteEntity>> getFavorites() {
-        return favoriteRepository.getFavorites();
+        return favoritesLiveData;
     }
 
+    /**
+     * Получить альбомы по списку ID
+     */
     public LiveData<List<AlbumEntity>> getAlbumsByIds(List<String> albumIds) {
         MutableLiveData<List<AlbumEntity>> result = new MutableLiveData<>();
 
-        new Thread(() -> {
-            List<AlbumEntity> albums = new ArrayList<>();
+        Log.d(TAG, "🔍 Loading " + albumIds.size() + " albums...");
 
-            for (String id : albumIds) {
+        List<AlbumEntity> albums = new ArrayList<>();
+
+        for (String id : albumIds) {
+            // Проверяем кеш
+            if (albumsCache.containsKey(id)) {
+                albums.add(albumsCache.get(id));
+                Log.d(TAG, "💾 Album from cache: " + id);
+            } else {
+                // Загружаем из БД (синхронно)
                 AlbumEntity album = database.albumDao().getAlbumByIdSync(id);
                 if (album != null) {
                     albums.add(album);
-                    Log.d(TAG, "Found album: " + album.getTitle());
+                    albumsCache.put(id, album);
+                    Log.d(TAG, "💿 Album from DB: " + album.getTitle());
                 } else {
-                    Log.w(TAG, "Album not found: " + id);
+                    Log.w(TAG, "⚠️ Album not found: " + id);
                 }
             }
+        }
 
-            Log.d(TAG, "Total albums found: " + albums.size());
-            result.postValue(albums);
-        }).start();
+        result.setValue(albums);
+        Log.d(TAG, "✅ Loaded " + albums.size() + " albums");
 
         return result;
     }
 
+    /**
+     * Удалить альбом из избранного
+     */
     public void removeFavorite(String albumId) {
-        favoriteRepository.removeFromFavorites(albumId);
-        Log.d(TAG, "Removing favorite: " + albumId);
+        Log.d(TAG, "🗑️ Removing favorite: " + albumId);
+
+        // СИНХРОННО удаляем через Repository
+        boolean success = favoriteRepository.removeFromFavoritesSync(albumId);
+
+        if (success) {
+            // Удаляем из кеша
+            albumsCache.remove(albumId);
+
+            // Перезагружаем список
+            loadFavorites();
+
+            Log.d(TAG, "✅ Removed successfully");
+        } else {
+            Log.e(TAG, "❌ Failed to remove");
+        }
+    }
+
+    @Override
+    protected void onCleared() {
+        super.onCleared();
+        Log.d(TAG, "💀 FavoritesViewModel cleared");
     }
 }

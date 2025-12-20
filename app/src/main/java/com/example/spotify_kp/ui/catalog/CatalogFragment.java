@@ -16,6 +16,7 @@ import android.widget.Toast;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
+import androidx.appcompat.app.AlertDialog;
 import androidx.fragment.app.Fragment;
 import androidx.lifecycle.ViewModelProvider;
 import androidx.recyclerview.widget.GridLayoutManager;
@@ -27,6 +28,13 @@ import com.example.spotify_kp.data.local.entity.AlbumEntity;
 import com.example.spotify_kp.ui.catalog.adapter.AlbumAdapter;
 import com.example.spotify_kp.ui.details.DetailsActivity;
 import com.example.spotify_kp.utils.Constants;
+import com.google.android.material.chip.Chip;
+import com.google.android.material.chip.ChipGroup;
+
+import java.util.ArrayList;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Set;
 
 public class CatalogFragment extends Fragment implements AlbumAdapter.OnAlbumClickListener {
 
@@ -41,6 +49,12 @@ public class CatalogFragment extends Fragment implements AlbumAdapter.OnAlbumCli
     private TextView errorText;
     private Button retryButton;
     private EditText searchInput;
+    private ChipGroup filterChipGroup;
+    private Chip chipGenre;
+    private Chip chipYear;
+    private Chip chipClearFilters;
+
+    private List<AlbumEntity> allAlbums = new ArrayList<>();
 
     @Nullable
     @Override
@@ -58,6 +72,7 @@ public class CatalogFragment extends Fragment implements AlbumAdapter.OnAlbumCli
         setupRecyclerView();
         setupSwipeRefresh();
         setupSearchInput();
+        setupFilters();
         observeAlbums();
 
         viewModel.loadAlbums();
@@ -72,6 +87,10 @@ public class CatalogFragment extends Fragment implements AlbumAdapter.OnAlbumCli
         errorText = view.findViewById(R.id.errorText);
         retryButton = view.findViewById(R.id.retryButton);
         searchInput = view.findViewById(R.id.searchInput);
+        filterChipGroup = view.findViewById(R.id.filterChipGroup);
+        chipGenre = view.findViewById(R.id.chipGenre);
+        chipYear = view.findViewById(R.id.chipYear);
+        chipClearFilters = view.findViewById(R.id.chipClearFilters);
     }
 
     private void setupViewModel() {
@@ -113,6 +132,86 @@ public class CatalogFragment extends Fragment implements AlbumAdapter.OnAlbumCli
         retryButton.setOnClickListener(v -> viewModel.loadAlbums());
     }
 
+    private void setupFilters() {
+        chipGenre.setOnClickListener(v -> showGenreFilterDialog());
+        chipYear.setOnClickListener(v -> showYearFilterDialog());
+        chipClearFilters.setOnClickListener(v -> {
+            viewModel.clearFilters();
+            chipClearFilters.setVisibility(View.GONE);
+            chipGenre.setText("Genre");
+            chipYear.setText("Year");
+        });
+
+        updateFilterChipsVisibility();
+    }
+
+    private void showGenreFilterDialog() {
+        if (allAlbums.isEmpty()) {
+            Toast.makeText(getContext(), "Loading albums...", Toast.LENGTH_SHORT).show();
+            return;
+        }
+
+        // Собираем уникальные жанры
+        Set<String> genres = new HashSet<>();
+        for (AlbumEntity album : allAlbums) {
+            if (album.getGenre() != null && !album.getGenre().isEmpty()) {
+                genres.add(album.getGenre());
+            }
+        }
+
+        String[] genreArray = genres.toArray(new String[0]);
+
+        new AlertDialog.Builder(requireContext())
+                .setTitle("Filter by Genre")
+                .setItems(genreArray, (dialog, which) -> {
+                    String selectedGenre = genreArray[which];
+                    viewModel.filterByGenre(selectedGenre);
+                    chipGenre.setText("Genre: " + selectedGenre);
+                    chipClearFilters.setVisibility(View.VISIBLE);
+                })
+                .setNegativeButton("Cancel", null)
+                .show();
+    }
+
+    private void showYearFilterDialog() {
+        if (allAlbums.isEmpty()) {
+            Toast.makeText(getContext(), "Loading albums...", Toast.LENGTH_SHORT).show();
+            return;
+        }
+
+        // Собираем уникальные годы
+        Set<String> years = new HashSet<>();
+        for (AlbumEntity album : allAlbums) {
+            if (album.getYear() != null && !album.getYear().isEmpty() && !album.getYear().equals("Unknown")) {
+                years.add(album.getYear());
+            }
+        }
+
+        List<String> sortedYears = new ArrayList<>(years);
+        sortedYears.sort((a, b) -> b.compareTo(a)); // От новых к старым
+
+        String[] yearArray = sortedYears.toArray(new String[0]);
+
+        new AlertDialog.Builder(requireContext())
+                .setTitle("Filter by Year")
+                .setItems(yearArray, (dialog, which) -> {
+                    String selectedYear = yearArray[which];
+                    viewModel.filterByYear(selectedYear);
+                    chipYear.setText("Year: " + selectedYear);
+                    chipClearFilters.setVisibility(View.VISIBLE);
+                })
+                .setNegativeButton("Cancel", null)
+                .show();
+    }
+
+    private void updateFilterChipsVisibility() {
+        if (viewModel.getCurrentGenre() != null || viewModel.getCurrentYear() != null) {
+            chipClearFilters.setVisibility(View.VISIBLE);
+        } else {
+            chipClearFilters.setVisibility(View.GONE);
+        }
+    }
+
     private void observeAlbums() {
         viewModel.getAlbums().observe(getViewLifecycleOwner(), resource -> {
             if (resource != null) {
@@ -128,6 +227,7 @@ public class CatalogFragment extends Fragment implements AlbumAdapter.OnAlbumCli
                     case SUCCESS:
                         if (resource.getData() != null && !resource.getData().isEmpty()) {
                             showContent();
+                            allAlbums = new ArrayList<>(resource.getData());
                             adapter.setAlbums(resource.getData());
                         } else {
                             showEmpty();

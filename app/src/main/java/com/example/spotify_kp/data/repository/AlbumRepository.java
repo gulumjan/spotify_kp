@@ -182,6 +182,45 @@ public class AlbumRepository {
         return result;
     }
 
+    // Фильтрация по жанру
+    public LiveData<Resource<List<AlbumEntity>>> getAlbumsByGenre(String genre) {
+        MutableLiveData<Resource<List<AlbumEntity>>> result = new MutableLiveData<>();
+        result.setValue(Resource.loading(null));
+
+        LiveData<List<AlbumEntity>> dbResult = database.albumDao().getAlbumsByGenre(genre);
+
+        // Простой observer для конвертации LiveData
+        new Thread(() -> {
+            try {
+                Thread.sleep(100); // Небольшая задержка для UI
+                result.postValue(Resource.success(dbResult.getValue()));
+            } catch (Exception e) {
+                result.postValue(Resource.error("Failed to filter by genre", null));
+            }
+        }).start();
+
+        return result;
+    }
+
+    // Фильтрация по году
+    public LiveData<Resource<List<AlbumEntity>>> getAlbumsByYear(String year) {
+        MutableLiveData<Resource<List<AlbumEntity>>> result = new MutableLiveData<>();
+        result.setValue(Resource.loading(null));
+
+        LiveData<List<AlbumEntity>> dbResult = database.albumDao().getAlbumsByYear(year);
+
+        new Thread(() -> {
+            try {
+                Thread.sleep(100);
+                result.postValue(Resource.success(dbResult.getValue()));
+            } catch (Exception e) {
+                result.postValue(Resource.error("Failed to filter by year", null));
+            }
+        }).start();
+
+        return result;
+    }
+
     // Получение всех альбомов из Room
     public LiveData<List<AlbumEntity>> getAllAlbumsFromDb() {
         return database.albumDao().getAllAlbums();
