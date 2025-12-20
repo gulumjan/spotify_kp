@@ -33,6 +33,9 @@ public class CatalogViewModel extends AndroidViewModel {
         return albums;
     }
 
+    /**
+     * Загрузка альбомов (с кешем и синхронизацией)
+     */
     public void loadAlbums() {
         if (currentSource != null) {
             albums.removeSource(currentSource);
@@ -42,6 +45,21 @@ public class CatalogViewModel extends AndroidViewModel {
         albums.addSource(currentSource, albums::setValue);
     }
 
+    /**
+     * Принудительное обновление (Pull-to-Refresh)
+     */
+    public void forceRefresh() {
+        if (currentSource != null) {
+            albums.removeSource(currentSource);
+        }
+
+        currentSource = albumRepository.forceRefresh();
+        albums.addSource(currentSource, albums::setValue);
+    }
+
+    /**
+     * Поиск альбомов (офлайн)
+     */
     public void searchAlbums(String query) {
         if (currentSource != null) {
             albums.removeSource(currentSource);
@@ -51,6 +69,9 @@ public class CatalogViewModel extends AndroidViewModel {
         albums.addSource(currentSource, albums::setValue);
     }
 
+    /**
+     * Фильтрация по жанру
+     */
     public void filterByGenre(String genre) {
         if (currentSource != null) {
             albums.removeSource(currentSource);
@@ -61,6 +82,9 @@ public class CatalogViewModel extends AndroidViewModel {
         albums.addSource(currentSource, albums::setValue);
     }
 
+    /**
+     * Фильтрация по году
+     */
     public void filterByYear(String year) {
         if (currentSource != null) {
             albums.removeSource(currentSource);
@@ -71,6 +95,9 @@ public class CatalogViewModel extends AndroidViewModel {
         albums.addSource(currentSource, albums::setValue);
     }
 
+    /**
+     * Очистить фильтры
+     */
     public void clearFilters() {
         currentGenre = null;
         currentYear = null;

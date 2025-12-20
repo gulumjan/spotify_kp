@@ -12,9 +12,13 @@ import com.example.spotify_kp.data.mapper.AlbumMapper;
 import com.example.spotify_kp.data.remote.RetrofitClient;
 import com.example.spotify_kp.data.remote.dto.AlbumDto;
 import com.example.spotify_kp.data.remote.dto.NewReleasesResponse;
+import com.example.spotify_kp.utils.NetworkUtils;
 import com.example.spotify_kp.utils.Resource;
 
+import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 
 import retrofit2.Call;
 import retrofit2.Callback;
@@ -24,15 +28,34 @@ public class NewReleasesRepository {
     private static final String TAG = "NewReleasesRepository";
 
     private AppDatabase database;
+    private Context context;
 
     public NewReleasesRepository(Context context) {
+        this.context = context.getApplicationContext();
         this.database = AppDatabase.getInstance(context);
     }
 
-    // Загрузка новинок из API
+    /**
+     * Загрузка новинок из API (БЕЗ дубликатов)
+     */
     public LiveData<Resource<List<AlbumEntity>>> loadNewReleases(int limit, int offset) {
         MutableLiveData<Resource<List<AlbumEntity>>> result = new MutableLiveData<>();
         result.setValue(Resource.loading(null));
+
+        // Сначала показываем что есть в кеше
+        new Thread(() -> {
+            List<AlbumEntity> cachedAlbums = database.albumDao().getAllAlbumsSync();
+            if (!cachedAlbums.isEmpty()) {
+                result.postValue(Resource.success(cachedAlbums));
+                Log.d(TAG, "💾 Showing cached: " + cachedAlbums.size());
+            }
+        }).start();
+
+        // Если есть интернет - загружаем новое
+        if (!NetworkUtils.isNetworkAvailable(context)) {
+            Log.d(TAG, "📶 Offline - showing cache only");
+            return result;
+        }
 
         RetrofitClient.api().getNewReleases(limit, offset)
                 .enqueue(new Callback<NewReleasesResponse>() {
@@ -42,40 +65,46 @@ public class NewReleasesRepository {
                         if (response.isSuccessful() && response.body() != null) {
                             NewReleasesResponse body = response.body();
 
-                            if (body.getAlbums() != null &&
-                                    body.getAlbums().getItems() != null) {
-
+                            if (body.getAlbums() != null && body.getAlbums().getItems() != null) {
                                 List<AlbumDto> albumDtos = body.getAlbums().getItems();
-                                List<AlbumEntity> albums = AlbumMapper.toEntityList(albumDtos);
+                                List<AlbumEntity> newAlbums = AlbumMapper.toEntityList(albumDtos);
 
-                                // Сохраняем в Room
                                 new Thread(() -> {
-                                    database.albumDao().insertAll(albums);
-                                    Log.d(TAG, "Saved new releases to database: " + albums.size());
-                                }).start();
+                                    // ✅ ИСПРАВЛЕНИЕ: Просто вставляем (REPLACE strategy)
+                                    // Room сам обработает дубликаты благодаря OnConflictStrategy.REPLACE
+                                    database.albumDao().insertAll(newAlbums);
 
-                                result.setValue(Resource.success(albums));
-                                Log.d(TAG, "Loaded new releases: " + albums.size());
-                            } else {
-                                result.setValue(Resource.error("No new releases found", null));
+                                    // Загружаем все уникальные альбомы из БД
+                                    List<AlbumEntity> allAlbums = database.albumDao().getAllAlbumsSync();
+
+                                    result.postValue(Resource.success(allAlbums));
+                                    Log.d(TAG, "✅ New releases loaded: " + newAlbums.size() +
+                                            ", Total unique: " + allAlbums.size());
+                                }).start();
                             }
                         } else {
-                            result.setValue(Resource.error("Failed to load new releases", null));
-                            Log.e(TAG, "API error: " + response.code());
+                            Log.e(TAG, "❌ API error: " + response.code());
                         }
                     }
 
                     @Override
                     public void onFailure(Call<NewReleasesResponse> call, Throwable t) {
-                        result.setValue(Resource.error("Network error: " + t.getMessage(), null));
-                        Log.e(TAG, "Network error: " + t.getMessage());
+                        Log.e(TAG, "❌ Network error: " + t.getMessage());
+
+                        // При ошибке показываем кеш
+                        new Thread(() -> {
+                            List<AlbumEntity> cachedAlbums = database.albumDao().getAllAlbumsSync();
+                            result.postValue(Resource.success(cachedAlbums));
+                        }).start();
                     }
                 });
 
         return result;
     }
 
-    // Загрузка следующей страницы (pagination)
+    /**
+     * Загрузка следующей страницы (pagination)
+     */
     public LiveData<Resource<List<AlbumEntity>>> loadMoreReleases(int offset) {
         return loadNewReleases(10, offset);
     }

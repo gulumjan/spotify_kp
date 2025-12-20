@@ -8,7 +8,7 @@ import androidx.lifecycle.LiveData;
 import androidx.lifecycle.MediatorLiveData;
 
 import com.example.spotify_kp.data.local.entity.AlbumEntity;
-import com.example.spotify_kp.data.repository.NewReleasesRepository;
+import com.example.spotify_kp.data.repository.AlbumRepository;
 import com.example.spotify_kp.utils.Resource;
 
 import java.util.ArrayList;
@@ -16,7 +16,7 @@ import java.util.List;
 
 public class NewReleasesViewModel extends AndroidViewModel {
 
-    private NewReleasesRepository repository;
+    private AlbumRepository repository;
     private MediatorLiveData<Resource<List<AlbumEntity>>> newReleases;
     private LiveData<Resource<List<AlbumEntity>>> currentSource;
 
@@ -27,7 +27,7 @@ public class NewReleasesViewModel extends AndroidViewModel {
 
     public NewReleasesViewModel(@NonNull Application application) {
         super(application);
-        repository = new NewReleasesRepository(application);
+        repository = new AlbumRepository(application);
         newReleases = new MediatorLiveData<>();
     }
 
