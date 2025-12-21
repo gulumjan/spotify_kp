@@ -17,6 +17,7 @@ import com.example.spotify_kp.R;
 import com.example.spotify_kp.data.local.entity.AlbumEntity;
 import com.example.spotify_kp.data.repository.FavoriteRepository;
 import com.example.spotify_kp.ui.favorites.dialog.AddToFavoriteDialog;
+import com.example.spotify_kp.ui.main.SharedViewModel;
 import com.example.spotify_kp.utils.Constants;
 import com.google.android.material.floatingactionbutton.FloatingActionButton;
 
@@ -35,6 +36,7 @@ public class DetailsActivity extends AppCompatActivity {
     private ImageView backButton;
 
     private DetailsViewModel viewModel;
+    private SharedViewModel sharedViewModel; // 🔥 Используем SharedViewModel
     private FavoriteRepository favoriteRepository;
 
     private String albumId;
@@ -58,7 +60,7 @@ public class DetailsActivity extends AppCompatActivity {
         Log.d(TAG, "🎵 Opening album: " + albumId);
 
         initViews();
-        setupViewModel();
+        setupViewModels();
         setupFavoriteRepository();
         setupObservers();
 
@@ -91,8 +93,18 @@ public class DetailsActivity extends AppCompatActivity {
         });
     }
 
-    private void setupViewModel() {
+    private void setupViewModels() {
         viewModel = new ViewModelProvider(this).get(DetailsViewModel.class);
+
+        // 🔥 КРИТИЧНО: Используем SharedViewModel из MainActivity (если запущен оттуда)
+        // Если DetailsActivity запущена из MainActivity, получаем её SharedViewModel
+        // Иначе создаём локальный экземпляр
+        try {
+            sharedViewModel = new ViewModelProvider(this).get(SharedViewModel.class);
+            Log.d(TAG, "✅ SharedViewModel connected - hashCode: " + sharedViewModel.hashCode());
+        } catch (Exception e) {
+            Log.w(TAG, "⚠️ Could not get SharedViewModel, using local FavoriteRepository");
+        }
     }
 
     private void setupFavoriteRepository() {
@@ -128,13 +140,19 @@ public class DetailsActivity extends AppCompatActivity {
     }
 
     private void checkFavoriteStatus() {
-        Log.d(TAG, "🔍 Checking favorite status");
+        Log.d(TAG, "🔍 Checking favorite status for: " + albumId);
 
-        // СИНХРОННО проверяем статус
-        isFavorite = favoriteRepository.isAlbumFavoriteSync(albumId);
-        updateFabIcon();
+        // 🔥 Проверяем в фоновом потоке чтобы не блокировать UI
+        new Thread(() -> {
+            boolean isFav = favoriteRepository.isAlbumFavoriteSync(albumId);
 
-        Log.d(TAG, "❤️ Is favorite: " + isFavorite);
+            // Обновляем UI в главном потоке
+            runOnUiThread(() -> {
+                isFavorite = isFav;
+                updateFabIcon();
+                Log.d(TAG, "❤️ Is favorite: " + isFavorite);
+            });
+        }).start();
     }
 
     private void displayAlbumDetails(AlbumEntity album) {
@@ -200,14 +218,25 @@ public class DetailsActivity extends AppCompatActivity {
                 // Удалить из избранного
                 Log.d(TAG, "🗑️ Removing from favorites");
 
-                boolean success = favoriteRepository.removeFromFavoritesSync(albumId);
+                new Thread(() -> {
+                    boolean success = favoriteRepository.removeFromFavoritesSync(albumId);
 
-                if (success) {
-                    Toast.makeText(this, "Removed from favorites", Toast.LENGTH_SHORT).show();
-                    checkFavoriteStatus();
-                } else {
-                    Toast.makeText(this, "Failed to remove", Toast.LENGTH_SHORT).show();
-                }
+                    runOnUiThread(() -> {
+                        if (success) {
+                            Toast.makeText(this, "Removed from favorites", Toast.LENGTH_SHORT).show();
+
+                            // 🔥 КРИТИЧНО: Обновляем SharedViewModel если он доступен
+                            if (sharedViewModel != null) {
+                                sharedViewModel.loadFavorites();
+                            }
+
+                            checkFavoriteStatus();
+                        } else {
+                            Toast.makeText(this, "Failed to remove", Toast.LENGTH_SHORT).show();
+                        }
+                    });
+                }).start();
+
             } else {
                 // Добавить в избранное
                 Log.d(TAG, "➕ Adding to favorites");
@@ -224,15 +253,24 @@ public class DetailsActivity extends AppCompatActivity {
                 (comment, rating) -> {
                     Log.d(TAG, "💾 Saving favorite with rating: " + rating);
 
-                    // СИНХРОННО сохраняем
-                    boolean success = favoriteRepository.addToFavoritesSync(albumId, comment, rating);
+                    new Thread(() -> {
+                        boolean success = favoriteRepository.addToFavoritesSync(albumId, comment, rating);
 
-                    if (success) {
-                        Toast.makeText(this, "Added to favorites!", Toast.LENGTH_SHORT).show();
-                        checkFavoriteStatus();
-                    } else {
-                        Toast.makeText(this, "Failed to add", Toast.LENGTH_SHORT).show();
-                    }
+                        runOnUiThread(() -> {
+                            if (success) {
+                                Toast.makeText(this, "Added to favorites!", Toast.LENGTH_SHORT).show();
+
+                                // 🔥 КРИТИЧНО: Обновляем SharedViewModel если он доступен
+                                if (sharedViewModel != null) {
+                                    sharedViewModel.loadFavorites();
+                                }
+
+                                checkFavoriteStatus();
+                            } else {
+                                Toast.makeText(this, "Failed to add", Toast.LENGTH_SHORT).show();
+                            }
+                        });
+                    }).start();
                 }
         );
         dialog.show();

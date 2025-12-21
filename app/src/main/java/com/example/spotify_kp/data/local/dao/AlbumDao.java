@@ -15,7 +15,7 @@ import java.util.List;
 @Dao
 public interface AlbumDao {
 
-    // ===== INSERT =====
+
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     void insert(AlbumEntity album);
 

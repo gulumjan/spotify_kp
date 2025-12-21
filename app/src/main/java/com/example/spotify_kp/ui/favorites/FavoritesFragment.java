@@ -26,6 +26,7 @@ import com.example.spotify_kp.data.repository.FavoriteRepository;
 import com.example.spotify_kp.ui.details.DetailsActivity;
 import com.example.spotify_kp.ui.favorites.adapter.FavoriteAdapter;
 import com.example.spotify_kp.ui.favorites.dialog.EditFavoriteDialog;
+import com.example.spotify_kp.ui.main.SharedViewModel;
 import com.example.spotify_kp.utils.Constants;
 
 import java.util.ArrayList;
@@ -40,7 +41,7 @@ public class FavoritesFragment extends Fragment implements FavoriteAdapter.OnFav
     private LinearLayout emptyState;
     private TextView emptyText;
 
-    private FavoritesViewModel viewModel;
+    private SharedViewModel sharedViewModel; // 🔥 Используем SharedViewModel из MainActivity
     private FavoriteAdapter adapter;
     private FavoriteRepository favoriteRepository;
 
@@ -58,7 +59,7 @@ public class FavoritesFragment extends Fragment implements FavoriteAdapter.OnFav
         Log.d(TAG, "🔧 onViewCreated");
 
         initViews(view);
-        setupViewModel();
+        setupSharedViewModel(); // 🔥 КРИТИЧНО: Используем SharedViewModel
         setupFavoriteRepository();
         setupRecyclerView();
         observeFavorites();
@@ -67,10 +68,12 @@ public class FavoritesFragment extends Fragment implements FavoriteAdapter.OnFav
     @Override
     public void onResume() {
         super.onResume();
-        Log.d(TAG, "▶️ onResume - FORCE RELOAD");
+        Log.d(TAG, "▶️ onResume - FORCE RELOAD from DB");
 
-        // КРИТИЧНО: Принудительно перезагружаем при каждом показе
-        viewModel.loadFavorites();
+        // 🔥 КРИТИЧНО: При каждом показе фрагмента перезагружаем данные из БД
+        if (sharedViewModel != null) {
+            sharedViewModel.loadFavorites();
+        }
     }
 
     private void initViews(View view) {
@@ -80,11 +83,11 @@ public class FavoritesFragment extends Fragment implements FavoriteAdapter.OnFav
         emptyText = view.findViewById(R.id.emptyText);
     }
 
-    private void setupViewModel() {
-        // 🔥 КРИТИЧНО: requireActivity() вместо this!
-        // ViewModel привязан к Activity, не к Fragment
-        viewModel = new ViewModelProvider(requireActivity()).get(FavoritesViewModel.class);
-        Log.d(TAG, "✅ FavoritesViewModel connected (Activity-scoped)");
+    private void setupSharedViewModel() {
+        // 🔥 КРИТИЧНО: Используем SharedViewModel из MainActivity
+        // Этот ViewModel живёт пока жива MainActivity и хранит данные между переключениями вкладок
+        sharedViewModel = new ViewModelProvider(requireActivity()).get(SharedViewModel.class);
+        Log.d(TAG, "✅ SharedViewModel connected - hashCode: " + sharedViewModel.hashCode());
     }
 
     private void setupFavoriteRepository() {
@@ -101,15 +104,17 @@ public class FavoritesFragment extends Fragment implements FavoriteAdapter.OnFav
     private void observeFavorites() {
         showLoading();
 
-        // Observe favorites - LiveData из ViewModel
-        viewModel.getFavorites().observe(getViewLifecycleOwner(), favorites -> {
-            Log.d(TAG, "📊 Favorites updated: " + (favorites != null ? favorites.size() : 0));
+        // 🔥 Подписываемся на данные из SharedViewModel
+        sharedViewModel.getFavorites().observe(getViewLifecycleOwner(), favorites -> {
+            Log.d(TAG, "📊 Favorites LiveData updated: " + (favorites != null ? favorites.size() : 0));
 
             hideLoading();
 
             if (favorites == null || favorites.isEmpty()) {
+                Log.d(TAG, "📭 No favorites found - showing empty state");
                 showEmpty();
             } else {
+                Log.d(TAG, "📚 Showing " + favorites.size() + " favorites");
                 showContent();
                 loadAlbumsForFavorites(favorites);
             }
@@ -119,18 +124,23 @@ public class FavoritesFragment extends Fragment implements FavoriteAdapter.OnFav
     private void loadAlbumsForFavorites(List<FavoriteEntity> favorites) {
         Log.d(TAG, "🔄 Loading albums for " + favorites.size() + " favorites");
 
+        // Собираем ID альбомов
         List<String> albumIds = new ArrayList<>();
         for (FavoriteEntity fav : favorites) {
             albumIds.add(fav.getAlbumId());
+            Log.d(TAG, "  - Album ID: " + fav.getAlbumId());
         }
 
-        // Загружаем альбомы через ViewModel
-        viewModel.getAlbumsByIds(albumIds).observe(getViewLifecycleOwner(), albums -> {
+        // Загружаем альбомы через SharedViewModel
+        sharedViewModel.getAlbumsByIds(albumIds).observe(getViewLifecycleOwner(), albums -> {
             Log.d(TAG, "💿 Albums loaded: " + (albums != null ? albums.size() : 0));
 
             if (albums != null && !albums.isEmpty()) {
                 adapter.setFavorites(favorites, albums);
                 showContent();
+                Log.d(TAG, "✅ Adapter updated with data");
+            } else {
+                Log.w(TAG, "⚠️ No albums loaded for favorites");
             }
         });
     }
@@ -149,8 +159,11 @@ public class FavoritesFragment extends Fragment implements FavoriteAdapter.OnFav
                 .setTitle("Remove from Favorites")
                 .setMessage("Are you sure you want to remove this album from favorites?")
                 .setPositiveButton("Remove", (dialog, which) -> {
-                    Log.d(TAG, "🗑️ Removing favorite: " + favorite.getAlbumId());
-                    viewModel.removeFavorite(favorite.getAlbumId());
+                    Log.d(TAG, "🗑️ User confirmed removal of: " + favorite.getAlbumId());
+
+                    // 🔥 Удаляем через SharedViewModel - он сохранит изменения в БД
+                    sharedViewModel.removeFromFavorites(favorite.getAlbumId());
+
                     Toast.makeText(getContext(), "Removed from favorites", Toast.LENGTH_SHORT).show();
                 })
                 .setNegativeButton("Cancel", null)
@@ -166,15 +179,18 @@ public class FavoritesFragment extends Fragment implements FavoriteAdapter.OnFav
                 favorite.getUserComment(),
                 favorite.getUserRating(),
                 (comment, rating) -> {
-                    Log.d(TAG, "✏️ Updating favorite: " + favorite.getAlbumId());
+                    Log.d(TAG, "✏️ User updated favorite: " + favorite.getAlbumId());
 
                     // Обновляем через Repository
-                    favoriteRepository.updateFavoriteSync(favorite.getAlbumId(), comment, rating);
+                    new Thread(() -> {
+                        favoriteRepository.updateFavoriteSync(favorite.getAlbumId(), comment, rating);
 
-                    // Перезагружаем список
-                    viewModel.loadFavorites();
-
-                    Toast.makeText(getContext(), "Favorite updated!", Toast.LENGTH_SHORT).show();
+                        // Перезагружаем список через SharedViewModel
+                        requireActivity().runOnUiThread(() -> {
+                            sharedViewModel.loadFavorites();
+                            Toast.makeText(getContext(), "Favorite updated!", Toast.LENGTH_SHORT).show();
+                        });
+                    }).start();
                 }
         );
         dialog.show();
@@ -211,5 +227,11 @@ public class FavoritesFragment extends Fragment implements FavoriteAdapter.OnFav
     public void onDestroyView() {
         super.onDestroyView();
         Log.d(TAG, "💥 onDestroyView");
+    }
+
+    @Override
+    public void onDestroy() {
+        super.onDestroy();
+        Log.d(TAG, "🔥 onDestroy");
     }
 }

@@ -14,4 +14,10 @@
         android:id="@+id/nav_favorites"
         android:icon="@drawable/ic_favorite"
         android:title="Favorites" />
+
+    <!-- ✅ NEW: Profile tab -->
+    <item
+        android:id="@+id/nav_profile"
+        android:icon="@drawable/ic_profile_placeholder"
+        android:title="Profile" />
 </menu>
