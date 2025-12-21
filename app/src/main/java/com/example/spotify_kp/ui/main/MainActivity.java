@@ -11,6 +11,8 @@ import android.widget.TextView;
 
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.fragment.app.Fragment;
+import androidx.fragment.app.FragmentTransaction;
+import androidx.lifecycle.ViewModelProvider;
 
 import com.bumptech.glide.Glide;
 import com.example.spotify_kp.R;
@@ -21,6 +23,7 @@ import com.example.spotify_kp.ui.auth.LoginActivity;
 import com.example.spotify_kp.ui.catalog.CatalogFragment;
 import com.example.spotify_kp.ui.favorites.FavoritesFragment;
 import com.example.spotify_kp.ui.newreleases.NewReleasesFragment;
+import com.example.spotify_kp.ui.profile.ProfileFragment;
 import com.example.spotify_kp.utils.NetworkUtils;
 import com.example.spotify_kp.utils.SharedPrefsManager;
 import com.google.android.material.bottomnavigation.BottomNavigationView;
@@ -29,13 +32,23 @@ import com.google.android.material.snackbar.Snackbar;
 import java.text.SimpleDateFormat;
 import java.util.Calendar;
 import java.util.Date;
+import java.util.HashMap;
 import java.util.Locale;
+import java.util.Map;
 
 import de.hdodenhof.circleimageview.CircleImageView;
 import retrofit2.Call;
 import retrofit2.Callback;
 import retrofit2.Response;
 
+/**
+ * 🔥 ФИНАЛЬНАЯ ВЕРСИЯ MainActivity
+ *
+ * Ключевые исправления:
+ * 1. SharedViewModel создаётся ОДИН РАЗ
+ * 2. Фрагменты КЕШИРУЮТСЯ и переиспользуются
+ * 3. При навигации фрагменты не уничтожаются, а скрываются/показываются
+ */
 public class MainActivity extends AppCompatActivity {
 
     private static final String TAG = "MainActivity";
@@ -46,20 +59,32 @@ public class MainActivity extends AppCompatActivity {
     private ImageView settingsIcon;
     private BottomNavigationView bottomNavigation;
 
-    // ✅ Офлайн индикатор
     private LinearLayout offlineIndicator;
     private TextView offlineText;
 
     private SharedPrefsManager prefsManager;
     private AlbumRepository albumRepository;
 
+    // 🔥 КРИТИЧНО: Один SharedViewModel для всего приложения
+    private SharedViewModel sharedViewModel;
+
+    // 🔥 КРИТИЧНО: Кеш фрагментов - создаём ОДИН РАЗ и переиспользуем
+    private Map<Integer, Fragment> fragmentCache = new HashMap<>();
+    private Fragment currentFragment;
+
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
 
+        Log.d(TAG, "🚀 MainActivity onCreate");
+
         prefsManager = SharedPrefsManager.getInstance(this);
         albumRepository = new AlbumRepository(this);
+
+        // 🔥 КРИТИЧНО: Создаём SharedViewModel ОДИН РАЗ при создании Activity
+        sharedViewModel = new ViewModelProvider(this).get(SharedViewModel.class);
+        Log.d(TAG, "✅ SharedViewModel created - hashCode: " + sharedViewModel.hashCode());
 
         initViews();
         setupHeader();
@@ -68,7 +93,7 @@ public class MainActivity extends AppCompatActivity {
 
         // Загружаем CatalogFragment по умолчанию
         if (savedInstanceState == null) {
-            loadFragment(new CatalogFragment());
+            showFragment(R.id.nav_catalog);
         }
     }
 
@@ -76,6 +101,10 @@ public class MainActivity extends AppCompatActivity {
     protected void onResume() {
         super.onResume();
         updateOfflineIndicator();
+
+        Log.d(TAG, "▶️ MainActivity onResume");
+        Log.d(TAG, "📊 SharedViewModel hashCode: " + sharedViewModel.hashCode());
+        Log.d(TAG, "📊 Favorites count: " + sharedViewModel.getFavoritesCount());
     }
 
     private void initViews() {
@@ -86,7 +115,6 @@ public class MainActivity extends AppCompatActivity {
         settingsIcon = headerView.findViewById(R.id.settingsIcon);
         bottomNavigation = findViewById(R.id.bottomNavigation);
 
-        // ✅ Инициализация офлайн индикатора
         offlineIndicator = findViewById(R.id.offlineIndicator);
         offlineText = findViewById(R.id.offlineText);
     }
@@ -95,7 +123,6 @@ public class MainActivity extends AppCompatActivity {
         setGreeting();
         loadUserProfile();
 
-        // Settings click - logout
         settingsIcon.setOnClickListener(v -> {
             prefsManager.logout();
             Intent intent = new Intent(MainActivity.this, LoginActivity.class);
@@ -107,30 +134,91 @@ public class MainActivity extends AppCompatActivity {
 
     private void setupBottomNavigation() {
         bottomNavigation.setOnItemSelectedListener(item -> {
-            Fragment fragment = null;
             int itemId = item.getItemId();
+            Log.d(TAG, "📱 Bottom navigation clicked: " + itemId);
 
-            if (itemId == R.id.nav_catalog) {
-                fragment = new CatalogFragment();
-            } else if (itemId == R.id.nav_new_releases) {
-                fragment = new NewReleasesFragment();
-            } else if (itemId == R.id.nav_favorites) {
-                fragment = new FavoritesFragment();
-            }
-
-            if (fragment != null) {
-                loadFragment(fragment);
-                return true;
-            }
-            return false;
+            showFragment(itemId);
+            return true;
         });
     }
 
-    private void loadFragment(Fragment fragment) {
-        getSupportFragmentManager()
-                .beginTransaction()
-                .replace(R.id.fragmentContainer, fragment)
-                .commit();
+    /**
+     * 🔥 КЛЮЧЕВОЙ МЕТОД: Показывает фрагмент из кеша или создаёт новый
+     * Фрагменты НЕ уничтожаются, а скрываются/показываются
+     */
+    private void showFragment(int menuItemId) {
+        // Получаем фрагмент из кеша или создаём новый
+        Fragment fragment = fragmentCache.get(menuItemId);
+
+        if (fragment == null) {
+            // Создаём фрагмент ОДИН РАЗ
+            if (menuItemId == R.id.nav_catalog) {
+                fragment = new CatalogFragment();
+                Log.d(TAG, "➕ Created NEW CatalogFragment");
+            } else if (menuItemId == R.id.nav_new_releases) {
+                fragment = new NewReleasesFragment();
+                Log.d(TAG, "➕ Created NEW NewReleasesFragment");
+            } else if (menuItemId == R.id.nav_favorites) {
+                fragment = new FavoritesFragment();
+                Log.d(TAG, "➕ Created NEW FavoritesFragment");
+            } else if (menuItemId == R.id.nav_profile) {
+                fragment = new ProfileFragment();
+                Log.d(TAG, "➕ Created NEW ProfileFragment");
+            }
+
+            // Сохраняем в кеш
+            if (fragment != null) {
+                fragmentCache.put(menuItemId, fragment);
+            }
+        } else {
+            Log.d(TAG, "♻️ Reusing cached fragment: " + fragment.getClass().getSimpleName());
+        }
+
+        if (fragment == null) {
+            return;
+        }
+
+        // 🔥 КЛЮЧЕВОЕ ИЗМЕНЕНИЕ: Используем show/hide вместо replace
+        // Это сохраняет фрагменты в памяти и НЕ уничтожает их ViewModels
+        FragmentTransaction transaction = getSupportFragmentManager().beginTransaction();
+
+        // Скрываем текущий фрагмент
+        if (currentFragment != null && currentFragment != fragment) {
+            transaction.hide(currentFragment);
+            Log.d(TAG, "👁️ Hidden: " + currentFragment.getClass().getSimpleName());
+        }
+
+        // Показываем нужный фрагмент
+        if (fragment.isAdded()) {
+            // Фрагмент уже добавлен - просто показываем
+            transaction.show(fragment);
+            Log.d(TAG, "👁️ Shown: " + fragment.getClass().getSimpleName());
+        } else {
+            // Фрагмент ещё не добавлен - добавляем
+            transaction.add(R.id.fragmentContainer, fragment);
+            Log.d(TAG, "➕ Added: " + fragment.getClass().getSimpleName());
+        }
+
+        transaction.commit();
+        currentFragment = fragment;
+
+        Log.d(TAG, "✅ Current fragment: " + currentFragment.getClass().getSimpleName());
+    }
+
+    /**
+     * Получить SharedViewModel
+     */
+    public SharedViewModel getSharedViewModel() {
+        return sharedViewModel;
+    }
+
+    /**
+     * Navigate to Favorites tab
+     */
+    public void navigateToFavorites() {
+        if (bottomNavigation != null) {
+            bottomNavigation.setSelectedItemId(R.id.nav_favorites);
+        }
     }
 
     private void setGreeting() {
@@ -147,9 +235,6 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private void loadUserProfile() {
-        Log.d(TAG, "Starting to load user profile...");
-
-        // Сначала показываем данные из SharedPreferences
         String savedName = prefsManager.getUserName();
         String savedImage = prefsManager.getUserImage();
 
@@ -165,38 +250,26 @@ public class MainActivity extends AppCompatActivity {
                     .into(profileImage);
         }
 
-        // Затем обновляем с сервера (только если есть интернет)
         if (!NetworkUtils.isNetworkAvailable(this)) {
-            Log.d(TAG, "📶 Offline mode - using cached profile");
             return;
         }
 
         RetrofitClient.api().getUserProfile().enqueue(new Callback<User>() {
             @Override
             public void onResponse(Call<User> call, Response<User> response) {
-                Log.d(TAG, "Response received. Code: " + response.code());
-
                 if (response.isSuccessful() && response.body() != null) {
                     User user = response.body();
-                    Log.d(TAG, "User loaded: " + user.getDisplayName());
-
                     runOnUiThread(() -> {
                         userName.setText(user.getDisplayName());
-
                         String imageUrl = user.getImageUrl();
                         if (imageUrl != null && !imageUrl.isEmpty()) {
-                            Log.d(TAG, "Loading image: " + imageUrl);
                             Glide.with(MainActivity.this)
                                     .load(imageUrl)
                                     .placeholder(R.drawable.ic_profile_placeholder)
                                     .error(R.drawable.ic_profile_placeholder)
                                     .into(profileImage);
                         }
-
-                        Log.d(TAG, "UI updated");
                     });
-                } else {
-                    Log.e(TAG, "Error loading profile: " + response.code());
                 }
             }
 
@@ -207,30 +280,16 @@ public class MainActivity extends AppCompatActivity {
         });
     }
 
-    /**
-     * ✅ Настройка индикатора офлайн-режима
-     */
     private void setupOfflineIndicator() {
         if (offlineIndicator == null || offlineText == null) {
-            Log.w(TAG, "⚠️ Offline indicator views not found");
             return;
         }
 
         updateOfflineIndicator();
 
-        // Клик по индикатору для обновления
         offlineIndicator.setOnClickListener(v -> {
             if (NetworkUtils.isNetworkAvailable(this)) {
                 Snackbar.make(v, "🔄 Refreshing data...", Snackbar.LENGTH_SHORT).show();
-
-                // Перезагружаем текущий фрагмент
-                Fragment currentFragment = getSupportFragmentManager()
-                        .findFragmentById(R.id.fragmentContainer);
-
-                if (currentFragment instanceof CatalogFragment) {
-                    loadFragment(new CatalogFragment());
-                }
-
                 updateOfflineIndicator();
             } else {
                 Snackbar.make(v, "📶 No internet connection", Snackbar.LENGTH_SHORT).show();
@@ -238,9 +297,6 @@ public class MainActivity extends AppCompatActivity {
         });
     }
 
-    /**
-     * ✅ Обновление индикатора офлайн-режима
-     */
     private void updateOfflineIndicator() {
         if (offlineIndicator == null || offlineText == null) {
             return;
@@ -249,39 +305,35 @@ public class MainActivity extends AppCompatActivity {
         boolean isOnline = NetworkUtils.isNetworkAvailable(this);
 
         if (!isOnline) {
-            // Офлайн режим
             offlineIndicator.setVisibility(View.VISIBLE);
             offlineIndicator.setBackgroundColor(Color.parseColor("#FF6B6B"));
-            offlineText.setText("📶 Offline Mode - Tap to sync when online");
-            Log.d(TAG, "📶 Offline mode indicator shown");
+            offlineText.setText("📶 Offline Mode");
         } else {
-            // Онлайн - проверяем когда была последняя синхронизация
             long lastSync = albumRepository.getLastSyncTime();
-
             if (lastSync == 0) {
-                // Никогда не синхронизировали
                 offlineIndicator.setVisibility(View.VISIBLE);
                 offlineIndicator.setBackgroundColor(Color.parseColor("#FFA726"));
                 offlineText.setText("⚠️ Tap to sync data");
             } else {
-                // Данные есть - показываем время последней синхронизации
                 SimpleDateFormat sdf = new SimpleDateFormat("MMM dd, HH:mm", Locale.getDefault());
                 String lastSyncStr = sdf.format(new Date(lastSync));
-
-                long timeSinceSync = System.currentTimeMillis() - lastSync;
-                long hours = timeSinceSync / (1000 * 60 * 60);
+                long hours = (System.currentTimeMillis() - lastSync) / (1000 * 60 * 60);
 
                 if (hours > 24) {
-                    // Данные устарели
                     offlineIndicator.setVisibility(View.VISIBLE);
                     offlineIndicator.setBackgroundColor(Color.parseColor("#66BB6A"));
-                    offlineText.setText("🔄 Last sync: " + lastSyncStr + " - Tap to update");
+                    offlineText.setText("🔄 Last sync: " + lastSyncStr);
                 } else {
-                    // Данные свежие
                     offlineIndicator.setVisibility(View.GONE);
                 }
             }
-            Log.d(TAG, "✅ Online mode, last sync: " + new Date(lastSync));
         }
+    }
+
+    @Override
+    protected void onDestroy() {
+        super.onDestroy();
+        Log.d(TAG, "💀 MainActivity destroyed");
+        Log.d(TAG, "💀 Fragment cache cleared: " + fragmentCache.size() + " fragments");
     }
 }

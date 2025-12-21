@@ -134,8 +134,13 @@ public class CatalogFragment extends Fragment implements AlbumAdapter.OnAlbumCli
     }
 
     private void setupFilters() {
-        chipGenre.setOnClickListener(v -> showGenreFilterDialog());
-        chipYear.setOnClickListener(v -> showYearFilterDialog());
+        // Genre filter with "All" option
+        chipGenre.setOnClickListener(v -> showGenreFilterBottomSheet());
+
+        // Year filter with "All" option
+        chipYear.setOnClickListener(v -> showYearFilterBottomSheet());
+
+        // Clear all filters
         chipClearFilters.setOnClickListener(v -> {
             viewModel.clearFilters();
             chipClearFilters.setVisibility(View.GONE);
@@ -146,13 +151,13 @@ public class CatalogFragment extends Fragment implements AlbumAdapter.OnAlbumCli
         updateFilterChipsVisibility();
     }
 
-    private void showGenreFilterDialog() {
+    private void showGenreFilterBottomSheet() {
         if (allAlbums.isEmpty()) {
             Toast.makeText(getContext(), "Loading albums...", Toast.LENGTH_SHORT).show();
             return;
         }
 
-        // Собираем уникальные жанры
+        // Collect unique genres
         Set<String> genres = new HashSet<>();
         for (AlbumEntity album : allAlbums) {
             if (album.getGenre() != null && !album.getGenre().isEmpty()) {
@@ -160,27 +165,49 @@ public class CatalogFragment extends Fragment implements AlbumAdapter.OnAlbumCli
             }
         }
 
-        String[] genreArray = genres.toArray(new String[0]);
+        List<String> genreList = new ArrayList<>(genres);
+        genreList.add(0, "🎵 All Genres"); // ✅ NEW: Add "All" option with emoji
+
+        String[] genreArray = genreList.toArray(new String[0]);
 
         new AlertDialog.Builder(requireContext())
-                .setTitle("Filter by Genre")
-                .setItems(genreArray, (dialog, which) -> {
-                    String selectedGenre = genreArray[which];
-                    viewModel.filterByGenre(selectedGenre);
-                    chipGenre.setText("Genre: " + selectedGenre);
-                    chipClearFilters.setVisibility(View.VISIBLE);
+                .setTitle("Select Genre")
+                .setSingleChoiceItems(genreArray, -1, (dialog, which) -> {
+                    if (which == 0) {
+                        // "All Genres" selected - clear filter
+                        viewModel.clearFilters();
+                        chipGenre.setText("Genre");
+                        chipClearFilters.setVisibility(View.GONE);
+                        Toast.makeText(getContext(), "Showing all genres", Toast.LENGTH_SHORT).show();
+                    } else {
+                        // Specific genre selected
+                        String selectedGenre = genreArray[which].replace("🎵 ", "");
+                        viewModel.filterByGenre(selectedGenre);
+                        chipGenre.setText("🎵 " + selectedGenre);
+                        chipClearFilters.setVisibility(View.VISIBLE);
+
+                        // Count how many albums match this genre
+                        int count = 0;
+                        for (AlbumEntity album : allAlbums) {
+                            if (selectedGenre.equals(album.getGenre())) {
+                                count++;
+                            }
+                        }
+                        Toast.makeText(getContext(), count + " albums found", Toast.LENGTH_SHORT).show();
+                    }
+                    dialog.dismiss();
                 })
                 .setNegativeButton("Cancel", null)
                 .show();
     }
 
-    private void showYearFilterDialog() {
+    private void showYearFilterBottomSheet() {
         if (allAlbums.isEmpty()) {
             Toast.makeText(getContext(), "Loading albums...", Toast.LENGTH_SHORT).show();
             return;
         }
 
-        // Собираем уникальные годы
+        // Collect unique years
         Set<String> years = new HashSet<>();
         for (AlbumEntity album : allAlbums) {
             if (album.getYear() != null && !album.getYear().isEmpty() && !album.getYear().equals("Unknown")) {
@@ -189,17 +216,37 @@ public class CatalogFragment extends Fragment implements AlbumAdapter.OnAlbumCli
         }
 
         List<String> sortedYears = new ArrayList<>(years);
-        sortedYears.sort((a, b) -> b.compareTo(a)); // От новых к старым
+        sortedYears.sort((a, b) -> b.compareTo(a)); // Newest first
+        sortedYears.add(0, "📅 All Years"); // ✅ NEW: Add "All" option with emoji
 
         String[] yearArray = sortedYears.toArray(new String[0]);
 
         new AlertDialog.Builder(requireContext())
-                .setTitle("Filter by Year")
-                .setItems(yearArray, (dialog, which) -> {
-                    String selectedYear = yearArray[which];
-                    viewModel.filterByYear(selectedYear);
-                    chipYear.setText("Year: " + selectedYear);
-                    chipClearFilters.setVisibility(View.VISIBLE);
+                .setTitle("Select Year")
+                .setSingleChoiceItems(yearArray, -1, (dialog, which) -> {
+                    if (which == 0) {
+                        // "All Years" selected - clear filter
+                        viewModel.clearFilters();
+                        chipYear.setText("Year");
+                        chipClearFilters.setVisibility(View.GONE);
+                        Toast.makeText(getContext(), "Showing all years", Toast.LENGTH_SHORT).show();
+                    } else {
+                        // Specific year selected
+                        String selectedYear = yearArray[which].replace("📅 ", "");
+                        viewModel.filterByYear(selectedYear);
+                        chipYear.setText("📅 " + selectedYear);
+                        chipClearFilters.setVisibility(View.VISIBLE);
+
+                        // Count how many albums from this year
+                        int count = 0;
+                        for (AlbumEntity album : allAlbums) {
+                            if (selectedYear.equals(album.getYear())) {
+                                count++;
+                            }
+                        }
+                        Toast.makeText(getContext(), count + " albums from " + selectedYear, Toast.LENGTH_SHORT).show();
+                    }
+                    dialog.dismiss();
                 })
                 .setNegativeButton("Cancel", null)
                 .show();

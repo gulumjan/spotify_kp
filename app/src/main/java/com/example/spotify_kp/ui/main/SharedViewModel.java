@@ -19,9 +19,13 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * SharedViewModel - живёт на уровне MainActivity
- * Управляет favorites для ВСЕГО приложения
- * Работает СИНХРОННО в main thread для гарантированной записи на диск
+ * 🔥 SharedViewModel - ЕДИНСТВЕННЫЙ источник правды для избранных альбомов
+ *
+ * Живёт на уровне MainActivity и разделяется между всеми фрагментами.
+ * Это гарантирует что данные НЕ теряются при переключении вкладок.
+ *
+ * ВАЖНО: Этот ViewModel создаётся ОДИН РАЗ при запуске MainActivity
+ * и живёт пока MainActivity не будет уничтожена.
  */
 public class SharedViewModel extends AndroidViewModel {
 
@@ -30,7 +34,7 @@ public class SharedViewModel extends AndroidViewModel {
     private AppDatabase database;
     private FavoriteRepository repository;
 
-    // Вручную управляемый список favorites
+    // 🔥 Единственный источник правды - данные живут здесь
     private MutableLiveData<List<FavoriteEntity>> favoritesLiveData = new MutableLiveData<>(new ArrayList<>());
 
     // Кеш альбомов для быстрого доступа
@@ -41,30 +45,52 @@ public class SharedViewModel extends AndroidViewModel {
         database = AppDatabase.getInstance(application);
         repository = new FavoriteRepository(application);
 
-        Log.d(TAG, "🚀 SharedViewModel created (Activity-scoped)");
+        Log.d(TAG, "🚀 SharedViewModel created (Activity-scoped) - hashCode: " + this.hashCode());
 
         // Загружаем favorites сразу при создании
         loadFavorites();
     }
 
     /**
-     * Загрузить все favorites из БД
-     * Работает СИНХРОННО в main thread
+     * 🔥 ГЛАВНЫЙ МЕТОД - Загрузить все favorites из БД
+     * Вызывается:
+     * 1. При создании ViewModel (запуск приложения)
+     * 2. При возврате на FavoritesFragment (onResume)
+     * 3. После добавления/удаления избранного
      */
     public void loadFavorites() {
-        Log.d(TAG, "📥 Loading favorites (main thread)...");
+        Log.d(TAG, "📥 Loading favorites from database...");
 
-        // Загружаем прямо в main thread т.к. allowMainThreadQueries включен
-        List<FavoriteEntity> favorites = repository.getAllFavoritesSync();
+        new Thread(() -> {
+            try {
+                // Загружаем ВСЕ избранные альбомы пользователя из БД
+                List<FavoriteEntity> favorites = repository.getAllFavoritesSync();
 
-        // Обновляем LiveData
-        favoritesLiveData.setValue(new ArrayList<>(favorites));
+                // 🔥 Обновляем LiveData - все подписчики получат обновление
+                favoritesLiveData.postValue(new ArrayList<>(favorites));
 
-        Log.d(TAG, "✅ Loaded " + favorites.size() + " favorites");
+                Log.d(TAG, "✅ Loaded " + favorites.size() + " favorites from DB");
+
+                // Логируем каждый альбом для отладки
+                if (!favorites.isEmpty()) {
+                    Log.d(TAG, "📋 Favorites list:");
+                    for (FavoriteEntity fav : favorites) {
+                        Log.d(TAG, "  - Album ID: " + fav.getAlbumId() +
+                                ", Rating: " + fav.getUserRating() +
+                                ", Comment: " + (fav.getUserComment() != null ? fav.getUserComment().substring(0, Math.min(20, fav.getUserComment().length())) : "none"));
+                    }
+                }
+
+            } catch (Exception e) {
+                Log.e(TAG, "❌ Error loading favorites: " + e.getMessage(), e);
+                favoritesLiveData.postValue(new ArrayList<>());
+            }
+        }).start();
     }
 
     /**
      * Получить LiveData со списком favorites
+     * Fragment подписывается на это и автоматически получает обновления
      */
     public LiveData<List<FavoriteEntity>> getFavorites() {
         return favoritesLiveData;
@@ -77,16 +103,18 @@ public class SharedViewModel extends AndroidViewModel {
     public void addToFavorites(String albumId, String comment, float rating) {
         Log.d(TAG, "➕ Adding to favorites (main thread): " + albumId);
 
-        // СИНХРОННО сохраняем в БД
-        boolean success = repository.addToFavoritesSync(albumId, comment, rating);
+        new Thread(() -> {
+            // СИНХРОННО сохраняем в БД
+            boolean success = repository.addToFavoritesSync(albumId, comment, rating);
 
-        if (success) {
-            // Сразу перезагружаем список
-            loadFavorites();
-            Log.d(TAG, "✅ Successfully added and reloaded list!");
-        } else {
-            Log.e(TAG, "❌ Failed to add to favorites!");
-        }
+            if (success) {
+                Log.d(TAG, "✅ Successfully added, reloading list...");
+                // Сразу перезагружаем список из БД
+                loadFavorites();
+            } else {
+                Log.e(TAG, "❌ Failed to add to favorites!");
+            }
+        }).start();
     }
 
     /**
@@ -96,15 +124,20 @@ public class SharedViewModel extends AndroidViewModel {
     public void removeFromFavorites(String albumId) {
         Log.d(TAG, "🗑️ Removing from favorites (main thread): " + albumId);
 
-        boolean success = repository.removeFromFavoritesSync(albumId);
+        new Thread(() -> {
+            boolean success = repository.removeFromFavoritesSync(albumId);
 
-        if (success) {
-            // Перезагружаем список
-            loadFavorites();
-            Log.d(TAG, "✅ Successfully removed and reloaded list!");
-        } else {
-            Log.e(TAG, "❌ Failed to remove from favorites!");
-        }
+            if (success) {
+                // Удаляем из кеша
+                albumsCache.remove(albumId);
+
+                Log.d(TAG, "✅ Successfully removed, reloading list...");
+                // Перезагружаем список из БД
+                loadFavorites();
+            } else {
+                Log.e(TAG, "❌ Failed to remove from favorites!");
+            }
+        }).start();
     }
 
     /**
@@ -113,10 +146,11 @@ public class SharedViewModel extends AndroidViewModel {
     public void updateFavorite(String albumId, String comment, float rating) {
         Log.d(TAG, "✏️ Updating favorite: " + albumId);
 
-        repository.updateFavoriteSync(albumId, comment, rating);
-
-        // Перезагружаем список
-        loadFavorites();
+        new Thread(() -> {
+            repository.updateFavoriteSync(albumId, comment, rating);
+            // Перезагружаем список
+            loadFavorites();
+        }).start();
     }
 
     /**
@@ -126,11 +160,11 @@ public class SharedViewModel extends AndroidViewModel {
     public LiveData<Boolean> isAlbumFavorite(String albumId) {
         MutableLiveData<Boolean> result = new MutableLiveData<>();
 
-        // СИНХРОННО проверяем в main thread
-        boolean isFav = repository.isAlbumFavoriteSync(albumId);
-        result.setValue(isFav);
-
-        Log.d(TAG, "❓ Is favorite: " + isFav + " for album: " + albumId);
+        new Thread(() -> {
+            boolean isFav = repository.isAlbumFavoriteSync(albumId);
+            result.postValue(isFav);
+            Log.d(TAG, "❓ Is favorite: " + isFav + " for album: " + albumId);
+        }).start();
 
         return result;
     }
@@ -141,30 +175,33 @@ public class SharedViewModel extends AndroidViewModel {
      */
     public LiveData<List<AlbumEntity>> getAlbumsByIds(List<String> albumIds) {
         MutableLiveData<List<AlbumEntity>> result = new MutableLiveData<>();
-        List<AlbumEntity> albums = new ArrayList<>();
 
         Log.d(TAG, "🔍 Loading " + albumIds.size() + " albums...");
 
-        for (String id : albumIds) {
-            // Проверяем кеш
-            if (albumsCache.containsKey(id)) {
-                albums.add(albumsCache.get(id));
-                Log.d(TAG, "💾 Album from cache: " + id);
-            } else {
-                // Загружаем из БД (синхронно)
-                AlbumEntity album = database.albumDao().getAlbumByIdSync(id);
-                if (album != null) {
-                    albums.add(album);
-                    albumsCache.put(id, album);
-                    Log.d(TAG, "💿 Album from DB: " + album.getTitle());
+        new Thread(() -> {
+            List<AlbumEntity> albums = new ArrayList<>();
+
+            for (String id : albumIds) {
+                // Проверяем кеш
+                if (albumsCache.containsKey(id)) {
+                    albums.add(albumsCache.get(id));
+                    Log.d(TAG, "💾 Album from cache: " + id);
                 } else {
-                    Log.w(TAG, "⚠️ Album not found: " + id);
+                    // Загружаем из БД (синхронно)
+                    AlbumEntity album = database.albumDao().getAlbumByIdSync(id);
+                    if (album != null) {
+                        albums.add(album);
+                        albumsCache.put(id, album);
+                        Log.d(TAG, "💿 Album from DB: " + album.getTitle());
+                    } else {
+                        Log.w(TAG, "⚠️ Album not found in DB: " + id);
+                    }
                 }
             }
-        }
 
-        result.setValue(albums);
-        Log.d(TAG, "✅ Loaded " + albums.size() + " albums");
+            result.postValue(albums);
+            Log.d(TAG, "✅ Loaded " + albums.size() + " albums");
+        }).start();
 
         return result;
     }
@@ -173,12 +210,13 @@ public class SharedViewModel extends AndroidViewModel {
      * Получить количество избранных альбомов
      */
     public int getFavoritesCount() {
-        return repository.getFavoritesCountSync();
+        List<FavoriteEntity> currentList = favoritesLiveData.getValue();
+        return currentList != null ? currentList.size() : 0;
     }
 
     @Override
     protected void onCleared() {
         super.onCleared();
-        Log.d(TAG, "💀 SharedViewModel cleared");
+        Log.d(TAG, "💀 SharedViewModel cleared (MainActivity destroyed)");
     }
 }

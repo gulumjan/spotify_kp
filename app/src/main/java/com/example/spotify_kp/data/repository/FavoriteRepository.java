@@ -26,7 +26,7 @@ public class FavoriteRepository {
     public boolean addToFavoritesSync(String albumId, String comment, float rating) {
         try {
             String userId = prefsManager.getUserId();
-            Log.d(TAG, "🔵 START: Adding " + albumId);
+            Log.d(TAG, "🔵 START: Adding favorite - Album: " + albumId);
 
             // Проверяем существует ли уже
             boolean exists = database.favoriteDao().isAlbumFavoriteSync(albumId, userId);
@@ -38,7 +38,19 @@ public class FavoriteRepository {
                     existing.setUserComment(comment);
                     existing.setUserRating(rating);
                     existing.setFavorite(true);
+                    existing.setAddedDate(System.currentTimeMillis()); // Обновляем timestamp
+
                     database.favoriteDao().update(existing);
+
+                    // ✅ NEW: Force database checkpoint to ensure data is written to disk
+                    try {
+                        database.getOpenHelper().getWritableDatabase()
+                                .execSQL("PRAGMA wal_checkpoint(TRUNCATE)");
+                        Log.d(TAG, "✅ Database checkpoint executed");
+                    } catch (Exception e) {
+                        Log.w(TAG, "⚠️ Checkpoint warning: " + e.getMessage());
+                    }
+
                     Log.d(TAG, "📝 Updated existing favorite");
                 }
             } else {
@@ -51,29 +63,48 @@ public class FavoriteRepository {
                 favorite.setAddedDate(System.currentTimeMillis());
                 favorite.setFavorite(true);
 
-                database.favoriteDao().insert(favorite);
-                Log.d(TAG, "➕ Inserted new favorite");
+                long insertId = database.favoriteDao().insert(favorite);
+
+                // ✅ NEW: Force database checkpoint
+                try {
+                    database.getOpenHelper().getWritableDatabase()
+                            .execSQL("PRAGMA wal_checkpoint(TRUNCATE)");
+                    Log.d(TAG, "✅ Database checkpoint executed");
+                } catch (Exception e) {
+                    Log.w(TAG, "⚠️ Checkpoint warning: " + e.getMessage());
+                }
+
+                Log.d(TAG, "➕ Inserted new favorite with ID: " + insertId);
+            }
+
+            // ✅ NEW: Add small delay to ensure write completion
+            try {
+                Thread.sleep(100);
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
             }
 
             // Проверка что реально сохранилось
             boolean check = database.favoriteDao().isAlbumFavoriteSync(albumId, userId);
 
             if (check) {
-                Log.d(TAG, "✅ VERIFIED: Album saved!");
+                Log.d(TAG, "✅ VERIFIED: Album successfully saved!");
             } else {
-                Log.e(TAG, "❌ ERROR: Album NOT saved!");
+                Log.e(TAG, "❌ ERROR: Album NOT saved after operation!");
+                return false;
             }
 
             // Выводим текущее количество
             int count = database.favoriteDao().getFavoritesCountSync(userId);
-            Log.d(TAG, "📊 Total favorites in DB: " + count);
+            Log.d(TAG, "📊 Total favorites in database: " + count);
 
             Log.d(TAG, "🔵 END: Operation complete");
 
-            return check;
+            return true;
 
         } catch (Exception e) {
-            Log.e(TAG, "❌ ERROR adding to favorites: " + e.getMessage(), e);
+            Log.e(TAG, "❌ CRITICAL ERROR adding to favorites: " + e.getMessage(), e);
+            e.printStackTrace();
             return false;
         }
     }
@@ -82,21 +113,42 @@ public class FavoriteRepository {
     public boolean removeFromFavoritesSync(String albumId) {
         try {
             String userId = prefsManager.getUserId();
-            Log.d(TAG, "🗑️ Removing: " + albumId);
+            Log.d(TAG, "🗑️ Removing favorite: " + albumId);
 
             // Удаляем через DAO
             database.favoriteDao().removeFavorite(albumId, userId);
 
-            // Проверка
-            boolean check = database.favoriteDao().isAlbumFavoriteSync(albumId, userId);
-
-            if (check) {
-                Log.e(TAG, "❌ ERROR: Album still exists after delete!");
-            } else {
-                Log.d(TAG, "✅ Successfully removed!");
+            // ✅ NEW: Force database checkpoint
+            try {
+                database.getOpenHelper().getWritableDatabase()
+                        .execSQL("PRAGMA wal_checkpoint(TRUNCATE)");
+                Log.d(TAG, "✅ Database checkpoint executed after delete");
+            } catch (Exception e) {
+                Log.w(TAG, "⚠️ Checkpoint warning: " + e.getMessage());
             }
 
-            return !check;
+            // ✅ NEW: Add small delay to ensure delete completion
+            try {
+                Thread.sleep(100);
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+            }
+
+            // Проверка
+            boolean stillExists = database.favoriteDao().isAlbumFavoriteSync(albumId, userId);
+
+            if (stillExists) {
+                Log.e(TAG, "❌ ERROR: Album still exists after delete!");
+                return false;
+            } else {
+                Log.d(TAG, "✅ Successfully removed from favorites!");
+
+                // Log current count
+                int count = database.favoriteDao().getFavoritesCountSync(userId);
+                Log.d(TAG, "📊 Remaining favorites: " + count);
+
+                return true;
+            }
 
         } catch (Exception e) {
             Log.e(TAG, "❌ ERROR removing from favorites: " + e.getMessage(), e);
@@ -116,6 +168,16 @@ public class FavoriteRepository {
                 favorite.setUserComment(comment);
                 favorite.setUserRating(rating);
                 database.favoriteDao().update(favorite);
+
+                // ✅ NEW: Force database checkpoint
+                try {
+                    database.getOpenHelper().getWritableDatabase()
+                            .execSQL("PRAGMA wal_checkpoint(TRUNCATE)");
+                    Log.d(TAG, "✅ Database checkpoint executed after update");
+                } catch (Exception e) {
+                    Log.w(TAG, "⚠️ Checkpoint warning: " + e.getMessage());
+                }
+
                 Log.d(TAG, "✅ Updated successfully");
             } else {
                 Log.w(TAG, "⚠️ Favorite not found for update");
@@ -164,6 +226,16 @@ public class FavoriteRepository {
     public void clearAllFavorites() {
         String userId = prefsManager.getUserId();
         database.favoriteDao().deleteAllByUser(userId);
+
+        // ✅ NEW: Force database checkpoint
+        try {
+            database.getOpenHelper().getWritableDatabase()
+                    .execSQL("PRAGMA wal_checkpoint(TRUNCATE)");
+            Log.d(TAG, "✅ Database checkpoint executed after clear all");
+        } catch (Exception e) {
+            Log.w(TAG, "⚠️ Checkpoint warning: " + e.getMessage());
+        }
+
         Log.d(TAG, "🗑️ Cleared all favorites for user: " + userId);
     }
 }
